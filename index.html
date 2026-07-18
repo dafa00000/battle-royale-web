@@ -2,81 +2,417 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Battle Royale Web Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Battle Royale - HUD Prototype</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Inter', system-ui, sans-serif; background: #0a0a0f; color: #f0f0f0; overflow: hidden; }
-    #app { width: 100vw; height: 100vh; }
-    #loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; background: #0a0a0f; z-index: 100; }
-    .spinner { width: 48px; height: 48px; border: 3px solid #2a2a3a; border-top-color: #00b4ff; border-radius: 50%; animation: spin 1s linear infinite; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: #0a0a0f; color: #f0f0f0; overflow: hidden;
+      width: 100vw; height: 100vh; touch-action: none;
+    }
+    #app { width: 100vw; height: 100vh; position: relative; }
+
+    /* Temporary cinematic backdrop: animated grid + vignette */
+    .backdrop {
+      position: fixed; inset: 0; z-index: 0;
+      background: linear-gradient(180deg, #0d0d12 0%, #1a1a2e 100%);
+      overflow: hidden;
+    }
+    .backdrop::before {
+      content: ''; position: absolute; inset: -50%;
+      background-image:
+        linear-gradient(rgba(0,180,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,180,255,0.04) 1px, transparent 1px);
+      background-size: 60px 60px;
+      animation: gridMove 8s linear infinite;
+    }
+    @keyframes gridMove {
+      from { transform: translate(0, 0); }
+      to { transform: translate(60px, 60px); }
+    }
+    .backdrop::after {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.8) 100%);
+      pointer-events: none;
+    }
+
+    /* Loading */
+    #loading {
+      position: fixed; inset: 0; z-index: 999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 1rem; background: #0a0a0f;
+      transition: opacity 0.3s;
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid #2a2a3a; border-top-color: #00b4ff;
+      border-radius: 50%; animation: spin 1s linear infinite;
+    }
     @keyframes spin { to { transform: rotate(360deg); } }
-    #ui { position: fixed; inset: 0; pointer-events: none; z-index: 50; }
-    .hud { position: absolute; bottom: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; pointer-events: none; }
-    .hud-panel { background: rgba(20,20,20,0.85); border: 1px solid #3c3c3c; border-radius: 12px; padding: 1rem 1.5rem; backdrop-filter: blur(8px); pointer-events: auto; }
-    .stat { display: flex; align-items: center; gap: 0.5rem; font-family: 'JetBrains Mono', monospace; }
-    .stat-label { color: #a0a0a0; font-size: 0.75rem; text-transform: uppercase; }
-    .stat-value { color: #fff; font-size: 1.25rem; font-weight: 700; }
-    .minimap { position: absolute; bottom: 20px; right: 20px; width: 200px; height: 200px; background: rgba(20,20,20,0.9); border: 2px solid #3c3c3c; border-radius: 12px; overflow: hidden; pointer-events: auto; }
-    .minimap-canvas { width: 100%; height: 100%; display: block; }
-    #crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 24px; height: 24px; pointer-events: none; z-index: 60; }
-    #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #00b4ff; opacity: 0.8; }
-    #crosshair::before { width: 2px; height: 12px; left: 50%; top: 50%; transform: translate(-50%, -50%) translateY(-16px); }
-    #crosshair::after { height: 2px; width: 12px; left: 50%; top: 50%; transform: translate(-50%, -50%) translateX(-16px); }
-    .weapon-hud { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(20,20,20,0.85); border: 1px solid #3c3c3c; border-radius: 12px; padding: 0.75rem 1.5rem; display: flex; align-items: center; gap: 1rem; pointer-events: auto; }
-    .ammo { font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; font-weight: 700; }
+
+    #ui {
+      position: fixed; inset: 0; pointer-events: none; z-index: 100;
+    }
+
+    /* === HUD === */
+    .hud {
+      position: absolute; bottom: 24px; left: 24px; right: 24px;
+      display: flex; justify-content: space-between; align-items: flex-end;
+      gap: 1rem; pointer-events: none;
+    }
+    .hud-panel {
+      background: rgba(15,15,20,0.85); border: 1px solid rgba(60,60,80,0.5);
+      border-radius: 8px; padding: 12px 16px;
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      pointer-events: auto;
+    }
+    .stat { display: flex; flex-direction: column; gap: 2px; }
+    .stat-label {
+      color: rgba(160,160,180,0.7); font-size: 9px;
+      text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600;
+    }
+    .stat-value {
+      color: #fff; font-size: 22px; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace; line-height: 1;
+    }
+
+    /* Health bar */
+    .health-bar-wrap { display: flex; flex-direction: column; gap: 6px; }
+    .health-bar {
+      width: 200px; height: 8px;
+      background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden;
+    }
+    .health-bar-fill {
+      height: 100%; background: linear-gradient(90deg, #00ff88, #00cc66);
+      transition: width 0.3s ease, background 0.3s; width: 100%;
+    }
+    .health-bar-fill.low { background: linear-gradient(90deg, #ffcc00, #ff8800); }
+    .health-bar-fill.critical { background: linear-gradient(90deg, #ff3300, #cc0000); animation: pulseRed 0.8s infinite; }
+    @keyframes pulseRed { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+    /* === Crosshair === */
+    #crosshair {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%); z-index: 60;
+      pointer-events: none; opacity: 0.7;
+    }
+    #crosshair .ch-line {
+      position: absolute; background: #00b4ff;
+    }
+    #crosshair .ch-top, #crosshair .ch-bottom { width: 2px; height: 8px; left: -1px; }
+    #crosshair .ch-top { top: -12px; }
+    #crosshair .ch-bottom { top: 4px; }
+    #crosshair .ch-left, #crosshair .ch-right { width: 8px; height: 2px; top: -1px; }
+    #crosshair .ch-left { left: -12px; }
+    #crosshair .ch-right { left: 4px; }
+
+    /* === Weapon HUD === */
+    .weapon-hud {
+      position: absolute; bottom: 24px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15,15,20,0.85); border: 1px solid rgba(60,60,80,0.5);
+      border-radius: 8px; padding: 10px 18px;
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      display: flex; align-items: center; gap: 1.2rem;
+      pointer-events: auto;
+    }
+    .ammo-display {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 28px; font-weight: 700; line-height: 1;
+    }
     .ammo-current { color: #00b4ff; }
-    .ammo-total { color: #a0a0a0; }
-    .fire-mode { text-transform: uppercase; font-size: 0.7rem; color: #ff8c00; letter-spacing: 0.05em; }
-    .zone-warning { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; opacity: 0; transition: opacity 0.3s; z-index: 70; }
+    .ammo-total { color: rgba(160,160,180,0.6); font-size: 18px; }
+    .ammo-divider { color: rgba(160,160,180,0.3); }
+    .fire-mode {
+      font-size: 10px; color: #ff8c00;
+      text-transform: uppercase; letter-spacing: 0.15em; font-weight: 700;
+    }
+    .weapon-name {
+      color: rgba(240,240,255,0.8); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+
+    /* === Minimap/Radar (bottom-left) === */
+    .radar {
+      position: absolute; bottom: 100px; left: 24px;
+      width: 180px; height: 180px;
+      border-radius: 12px; overflow: hidden;
+      background: rgba(15,15,20,0.9);
+      border: 1px solid rgba(60,60,80,0.5);
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      pointer-events: auto;
+    }
+    .radar canvas { width: 100%; height: 100%; display: block; }
+    .radar-north {
+      position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
+      color: #00b4ff; font-size: 11px; font-weight: 700;
+      text-shadow: 0 0 4px rgba(0,180,255,0.6);
+      pointer-events: none; z-index: 2;
+    }
+    .radar-ping {
+      position: absolute; top: 50%; left: 50%;
+      width: 20px; height: 20px; border-radius: 50%;
+      border: 1px solid rgba(0,180,255,0.6);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      animation: ping 2s ease-out infinite;
+    }
+    @keyframes ping {
+      0% { width: 4px; height: 4px; opacity: 1; }
+      100% { width: 180px; height: 180px; opacity: 0; }
+    }
+
+    /* === Zone warning === */
+    .zone-warning {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center; pointer-events: none;
+      opacity: 0; transition: opacity 0.3s; z-index: 70;
+    }
     .zone-warning.visible { opacity: 1; }
-    .zone-warning-text { font-size: 2rem; font-weight: 700; color: #dc3232; text-shadow: 0 0 20px #dc3232; animation: pulse 1s ease-in-out infinite; }
-    .zone-warning-sub { color: #fff; margin-top: 0.5rem; font-size: 1rem; }
-    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
-    .kill-feed { position: fixed; top: 20px; right: 20px; width: 300px; display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none; z-index: 50; }
-    .kill-entry { background: rgba(20,20,20,0.9); border: 1px solid #3c3c3c; border-radius: 8px; padding: 0.5rem 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; animation: slideIn 0.3s ease-out; opacity: 0; }
+    .zone-warning-text {
+      font-size: 1.5rem; font-weight: 700; color: #dc3232;
+      text-shadow: 0 0 20px rgba(220,50,50,0.6);
+      letter-spacing: 0.05em; text-transform: uppercase;
+      animation: pulse 1s ease-in-out infinite;
+    }
+    .zone-warning-sub { color: rgba(255,255,255,0.8); margin-top: 4px; font-size: 0.85rem; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+    /* === Kill feed === */
+    .kill-feed {
+      position: fixed; top: 24px; right: 24px;
+      display: flex; flex-direction: column; gap: 4px;
+      pointer-events: none; z-index: 50;
+    }
+    .kill-entry {
+      background: rgba(15,15,20,0.85); border: 1px solid rgba(60,60,80,0.4);
+      border-radius: 4px; padding: 6px 10px;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      animation: slideIn 0.3s ease-out; opacity: 0;
+      transition: opacity 0.4s; white-space: nowrap;
+    }
     .kill-entry.visible { opacity: 1; }
-    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes slideIn { from { transform: translateX(20px); } to { transform: translateX(0); } }
     .killer { color: #00b4ff; }
     .victim { color: #dc3232; }
     .weapon { color: #ff8c00; }
+
+    /* === Squad status (top-left) === */
+    .squad {
+      position: absolute; top: 24px; left: 24px;
+      display: flex; flex-direction: column; gap: 6px;
+      pointer-events: none;
+    }
+    .squad-member {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(15,15,20,0.75); border: 1px solid rgba(60,60,80,0.3);
+      border-radius: 4px; padding: 6px 10px;
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+      min-width: 160px;
+    }
+    .squad-avatar {
+      width: 24px; height: 24px; border-radius: 3px;
+      background: linear-gradient(135deg, #3c3c50, #1a1a2e);
+      font-size: 11px; font-weight: 700; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .squad-info { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+    .squad-name {
+      color: rgba(240,240,255,0.9); font-size: 11px; font-weight: 600;
+    }
+    .squad-hp {
+      width: 100%; height: 4px; background: rgba(255,255,255,0.08);
+      border-radius: 2px; overflow: hidden;
+    }
+    .squad-hp-fill { height: 100%; background: #00cc66; transition: width 0.3s; }
+    .squad-hp-fill.med { background: #ff8800; }
+    .squad-hp-fill.low { background: #dc3232; }
+    .squad-status {
+      font-size: 9px; color: rgba(160,160,180,0.6); text-transform: uppercase;
+    }
+    .squad-status.down { color: #dc3232; }
+
+    /* === Interaction prompt === */
+    .interaction-prompt {
+      position: fixed; top: 55%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(15,15,20,0.9); border: 1px solid rgba(0,180,255,0.5);
+      border-radius: 4px; padding: 12px 20px;
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      pointer-events: none; opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 65; text-align: center;
+    }
+    .interaction-prompt.visible {
+      opacity: 1; transform: translate(-50%, -100%);
+    }
+    .interaction-key {
+      display: inline-block; background: #00b4ff; color: #0a0a0f;
+      font-weight: 700; font-size: 11px; padding: 2px 8px;
+      border-radius: 3px; margin-right: 6px; font-family: monospace;
+    }
+    .interaction-text {
+      color: #fff; font-size: 13px; font-weight: 600;
+      letter-spacing: 0.03em; text-transform: uppercase;
+    }
+    .interaction-sub {
+      color: rgba(160,160,180,0.6); font-size: 10px; margin-top: 3px;
+    }
+
+    /* === Debug buttons === */
+    .debug-controls {
+      position: fixed; top: 24px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 6px; z-index: 200; pointer-events: auto;
+    }
+    .debug-btn {
+      background: rgba(15,15,20,0.9); border: 1px solid rgba(60,60,80,0.5);
+      color: rgba(240,240,255,0.8); padding: 6px 12px; border-radius: 4px;
+      font-size: 10px; font-family: monospace; cursor: pointer;
+      backdrop-filter: blur(4px); transition: all 0.15s;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .debug-btn:hover { background: rgba(0,180,255,0.2); border-color: #00b4ff; }
+    .debug-btn:active { transform: scale(0.95); }
+
+    /* === Gas vignette === */
+    #gas-vignette {
+      position: fixed; inset: 0; z-index: 55;
+      pointer-events: none; opacity: 0; transition: opacity 0.3s;
+    }
+
+    /* === Low health overlay === */
+    .low-health-overlay {
+      position: fixed; inset: 0; z-index: 56; pointer-events: none;
+      box-shadow: inset 0 0 120px rgba(220,30,30,0.4);
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .low-health-overlay.active { opacity: 1; animation: pulseRed 1.5s infinite; }
+
+    /* === Reload text === */
+    .reload-text {
+      position: fixed; top: 62%; left: 50%;
+      transform: translate(-50%, -50%);
+      color: #ff8c00; font-size: 13px; font-weight: 700;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      text-shadow: 0 0 8px rgba(255,140,0,0.4);
+      opacity: 0; transition: opacity 0.15s;
+      z-index: 65; pointer-events: none;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .reload-text.visible { opacity: 1; }
+
+    @media (max-width: 600px) {
+      .radar { width: 130px; height: 130px; bottom: 90px; left: 16px; }
+      .hud { bottom: 16px; left: 16px; right: 16px; }
+      .hud-panel { padding: 8px 12px; }
+      .stat-value { font-size: 18px; }
+      .health-bar { width: 140px; }
+      .squad-member { min-width: 130px; padding: 4px 8px; }
+      .weapon-hud { padding: 8px 14px; }
+      .ammo-display { font-size: 22px; }
+      .debug-controls { flex-wrap: wrap; justify-content: center; max-width: 90vw; }
+      .debug-btn { padding: 5px 10px; font-size: 9px; }
+    }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
+  <div class="backdrop"></div>
+
   <div id="loading">
     <div class="spinner"></div>
-    <div style="color: #a0a0a0; font-size: 0.9rem;">Loading Battle Royale Demo...</div>
+    <div style="color: #a0a0b0; font-size: 0.85rem;">Loading HUD Prototype...</div>
   </div>
+
   <div id="app"></div>
+
   <div id="ui">
-    <div class="hud">
-      <div class="hud-panel">
-        <div class="stat"><span class="stat-label">Health</span><span class="stat-value" id="hp">100</span></div>
-        <div class="stat"><span class="stat-label">Armor</span><span class="stat-value" id="armor">0</span></div>
-      </div>
-      <div class="hud-panel">
-        <div class="stat"><span class="stat-label">Zone</span><span class="stat-value" id="zone-phase">1</span></div>
-        <div class="stat"><span class="stat-label">Alive</span><span class="stat-value" id="alive">100</span></div>
-      </div>
+    <!-- Squad status -->
+    <div class="squad" id="squad"></div>
+
+    <!-- Kill feed -->
+    <div class="kill-feed" id="kill-feed"></div>
+
+    <!-- Debug buttons -->
+    <div class="debug-controls">
+      <button class="debug-btn" onclick="simReload()">Reload [R]</button>
+      <button class="debug-btn" onclick="simDamage()">Damage [H]</button>
+      <button class="debug-btn" onclick="simHeal()">Heal</button>
+      <button class="debug-btn" onclick="simPickup()">Pickup [E]</button>
+      <button class="debug-btn" onclick="simKill()">Kill Feed</button>
     </div>
-    <canvas class="minimap-canvas" id="minimap"></canvas>
-    <div id="crosshair"></div>
-    <div class="weapon-hud">
-      <div>
-        <div class="ammo"><span class="ammo-current" id="ammo-current">30</span><span class="ammo-total"> / <span id="ammo-total">30</span></span></div>
-        <div class="fire-mode" id="fire-mode">auto</div>
-      </div>
-      <div style="color: #a0a0a0; font-size: 0.85rem;" id="weapon-name">AK-74</div>
+
+    <!-- Crosshair -->
+    <div id="crosshair">
+      <div class="ch-line ch-top"></div>
+      <div class="ch-line ch-bottom"></div>
+      <div class="ch-line ch-left"></div>
+      <div class="ch-line ch-right"></div>
     </div>
+
+    <!-- Interaction prompt -->
+    <div class="interaction-prompt" id="interaction">
+      <div><span class="interaction-key">E</span><span class="interaction-text" id="interaction-text">PICK UP M4A1 AMMO</span></div>
+      <div class="interaction-sub" id="interaction-sub">5.56mm · 30 rounds</div>
+    </div>
+
+    <!-- Reload text -->
+    <div class="reload-text" id="reload-text">RELOADING...</div>
+
+    <!-- Zone warning -->
     <div class="zone-warning" id="zone-warning">
       <div class="zone-warning-text">ZONE SHRINKING</div>
       <div class="zone-warning-sub" id="zone-warning-sub">Next phase in 30s</div>
     </div>
-    <div class="kill-feed" id="kill-feed"></div>
+
+    <!-- Minimap/Radar -->
+    <div class="radar">
+      <div class="radar-north">N</div>
+      <div class="radar-ping"></div>
+      <canvas id="radar-canvas" width="360" height="360"></canvas>
+    </div>
+
+    <!-- HUD bottom bar -->
+    <div class="hud">
+      <div class="hud-panel">
+        <div class="health-bar-wrap">
+          <div class="stat">
+            <span class="stat-label">Health</span>
+            <span class="stat-value" id="hp">100</span>
+          </div>
+          <div class="health-bar"><div class="health-bar-fill" id="hp-bar-fill"></div></div>
+        </div>
+      </div>
+      <div class="hud-panel">
+        <div class="stat"><span class="stat-label">Zone</span><span class="stat-value" id="zone-phase">1</span></div>
+      </div>
+      <div class="hud-panel">
+        <div class="stat"><span class="stat-label">Alive</span><span class="stat-value" id="alive">100</span></div>
+      </div>
+    </div>
+
+    <!-- Weapon HUD -->
+    <div class="weapon-hud">
+      <div>
+        <div class="ammo-display">
+          <span class="ammo-current" id="ammo-current">30</span><span class="ammo-divider"> / </span><span class="ammo-total" id="ammo-total">30</span>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <span class="fire-mode" id="fire-mode">AUTO</span>
+          <span class="weapon-name" id="weapon-name">AK-74</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="low-health-overlay" id="low-health"></div>
   </div>
+
+  <div id="gas-vignette"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

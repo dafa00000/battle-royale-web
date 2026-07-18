@@ -1,369 +1,438 @@
 // ============================================
-// BATTLE ROYALE WEB - MAIN ENTRY POINT
+// BATTLE ROYALE - HUD PROTOTYPE (UI only, no 3D)
 // ============================================
 
-import * as THREE from 'three';
-import { CONSTANTS } from './constants';
-import type { Vector3, WeaponTemplate, GameState, Stance, SquadData } from './types';
-import { MovementSystem } from './systems/MovementSystem';
-import { ZoneSystem } from './systems/ZoneSystem';
-import { WeaponSystem } from './systems/WeaponSystem';
-import { HUD } from './ui/HUD';
-import { Minimap } from './ui/Minimap';
-import { InventoryUI } from './ui/InventoryUI';
-
-// ============================================
-// GAME STATE - Using imported types
-// ============================================
+interface GameState {
+  health: number; maxHealth: number;
+  armor: number; maxArmor: number;
+  ammo: number; ammoReserve: number; maxAmmo: number;
+  weaponName: string; fireMode: 'AUTO' | 'SEMI';
+  zonePhase: number; alive: number;
+  isReloading: boolean;
+}
 
 const state: GameState = {
-  player: {
-    position: [0, 1.7, 0],
-    velocity: [0, 0, 0],
-    rotation: [0, 0, 0],
-    stance: 'Stand',
-    isMoving: false,
-    isSprinting: false,
-    isSliding: false,
-    isADS: false,
-    lean: 0,
-    health: 100,
-    armor: 0,
-    maxHealth: 100,
-    maxArmor: 100,
-    currentWeapon: null,
-    ammo: 30,
-    maxAmmo: 30,
-    fireMode: 'auto',
-    stanceTransitionTime: 0,
-    slideEndTime: 0,
-    leanTarget: 0,
-    inventoryWeight: 0,
-    maxWeight: 100,
-    isGrounded: true,
-    isInGasDamageCooldown: false,
-    id: 0,
-  },
-  zone: { center: [0, 0, 0], radius: 2000, phase: 0, phaseEndTime: 0, isShrinking: false, damagePerTick: 2, tickInterval: 2 },
-  alivePlayers: 100,
-  currentPhase: 0,
-  matchTime: 0,
-  isInGas: false,
-  gasIntensity: 0,
-  squad: null,
-  keys: {} as Record<string, boolean>,
-  mouse: { x: 0, y: 0, locked: false },
-  isADS: false,
-};
-
-// Local extended state
-const localState = {
-  ...state,
-  keys: {} as Record<string, boolean>,
-  mouse: { x: 0, y: 0, locked: false },
-  isADS: false,
+  health: 100, maxHealth: 100,
+  armor: 0, maxArmor: 100,
+  ammo: 30, ammoReserve: 90, maxAmmo: 30,
+  weaponName: 'AK-74', fireMode: 'AUTO',
+  zonePhase: 1, alive: 100,
+  isReloading: false,
 };
 
 // ============================================
-// THREE.JS SETUP
+// HUD UPDATE
 // ============================================
+function updateHUD(): void {
+  const hpEl = document.getElementById('hp');
+  const hpBar = document.getElementById('hp-bar-fill');
+  const ammoCur = document.getElementById('ammo-current');
+  const ammoTot = document.getElementById('ammo-total');
+  const fireModeEl = document.getElementById('fire-mode');
+  const weaponEl = document.getElementById('weapon-name');
+  const zoneEl = document.getElementById('zone-phase');
+  const aliveEl = document.getElementById('alive');
+  const lowHealth = document.getElementById('low-health');
 
-let scene: THREE.Scene;
-let camera: THREE.PerspectiveCamera;
-let renderer: THREE.WebGLRenderer;
-let clock = new THREE.Clock();
-
-function initThree() {
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0a0a0f);
-  scene.fog = new THREE.Fog(0x0a0a0f, 100, 2000);
-
-  camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 5000);
-  camera.position.set(0, 1.7, 0);
-
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.2;
-  document.getElementById('app')!.appendChild(renderer.domElement);
-
-  // Lighting (Resident Evil / GTA V style)
-  const ambient = new THREE.AmbientLight(0x14141e, 0.8);
-  scene.add(ambient);
-
-  const sun = new THREE.DirectionalLight(0xffeedd, 1.5);
-  sun.position.set(1000, 800, 500);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.near = 10;
-  sun.shadow.camera.far = 3000;
-  sun.shadow.camera.left = -1000;
-  sun.shadow.camera.right = 1000;
-  sun.shadow.camera.top = 1000;
-  sun.shadow.camera.bottom = -1000;
-  sun.shadow.bias = -0.001;
-  scene.add(sun);
-
-  const fill = new THREE.DirectionalLight(0x88aacc, 0.3);
-  fill.position.set(-500, 300, -500);
-  scene.add(fill);
-
-  // Ground
-  const groundGeo = new THREE.PlaneGeometry(10000, 10000, 100, 100);
-  const groundMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.9, metalness: 0.1 });
-  const ground = new THREE.Mesh(groundGeo, groundMat);
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  // Grid helper for reference
-  const grid = new THREE.GridHelper(10000, 200, 0x3c3c3c, 0x2a2a3a);
-  grid.position.y = 0.01;
-  scene.add(grid);
-
-  // Simple buildings for reference
-  for (let i = 0; i < 20; i++) {
-    const x = (Math.random() - 0.5) * 4000;
-    const z = (Math.random() - 0.5) * 4000;
-    const h = 5 + Math.random() * 30;
-    const w = 8 + Math.random() * 15;
-    const d = 8 + Math.random() * 15;
-
-    const geo = new THREE.BoxGeometry(w, h, d);
-    const mat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color().setHSL(0.08, 0.1, 0.15 + Math.random() * 0.1),
-      roughness: 0.8, metalness: 0.1,
-    });
-    const building = new THREE.Mesh(geo, mat);
-    building.position.set(x, h / 2, z);
-    building.castShadow = true;
-    building.receiveShadow = true;
-    scene.add(building);
+  if (hpEl) hpEl.textContent = String(Math.round(state.health));
+  if (hpBar) {
+    const pct = (state.health / state.maxHealth) * 100;
+    hpBar.style.width = `${pct}%`;
+    hpBar.className = 'health-bar-fill';
+    if (pct < 25) hpBar.classList.add('critical');
+    else if (pct < 50) hpBar.classList.add('low');
   }
+  if (lowHealth) lowHealth.classList.toggle('active', state.health < 25);
 
-  // Zone visualization
-  const zoneGeo = new THREE.RingGeometry(1990, 2010, 64);
-  const zoneMat = new THREE.MeshBasicMaterial({ color: 0x00b4ff, side: THREE.DoubleSide, transparent: true, opacity: 0.15 });
-  const zoneRing = new THREE.Mesh(zoneGeo, zoneMat);
-  zoneRing.rotation.x = -Math.PI / 2;
-  zoneRing.position.y = 0.1;
-  zoneRing.name = 'zoneRing';
-  scene.add(zoneRing);
-
-  // Weapon placeholder (raycast visualization)
-  const weaponGeo = new THREE.BoxGeometry(0.1, 0.1, 0.5);
-  const weaponMat = new THREE.MeshBasicMaterial({ color: 0x00b4ff, wireframe: true });
-  const weaponMesh = new THREE.Mesh(weaponGeo, weaponMat);
-  weaponMesh.name = 'weaponMesh';
-  weaponMesh.visible = false;
-  camera.add(weaponMesh);
+  if (ammoCur) ammoCur.textContent = String(state.ammo);
+  if (ammoTot) ammoTot.textContent = String(state.ammoReserve);
+  if (fireModeEl) fireModeEl.textContent = state.fireMode;
+  if (weaponEl) weaponEl.textContent = state.weaponName;
+  if (zoneEl) zoneEl.textContent = String(state.zonePhase);
+  if (aliveEl) aliveEl.textContent = String(state.alive);
 }
 
 // ============================================
-// INPUT HANDLING
+// SQUAD STATUS
 // ============================================
+interface SquadMember { name: string; hp: number; status: 'ALIVE' | 'DOWN' | 'DEAD'; }
+let squad: SquadMember[] = [
+  { name: 'Ghost_42', hp: 100, status: 'ALIVE' },
+  { name: 'Recon_07', hp: 65, status: 'ALIVE' },
+  { name: 'Viper_X', hp: 25, status: 'ALIVE' },
+  { name: 'Dead_MeAT', hp: 0, status: 'DEAD' },
+];
 
-function initInput() {
-  document.addEventListener('keydown', (e) => {
-    state.keys[e.code] = true;
-    handleKeyPress(e.code);
+function renderSquad(): void {
+  const container = document.getElementById('squad');
+  if (!container) return;
+  container.innerHTML = '';
+
+  squad.forEach(member => {
+    const div = document.createElement('div');
+    div.className = 'squad-member';
+
+    const initial = member.name[0].toUpperCase();
+    const hpClass = member.hp > 60 ? '' : member.hp > 30 ? 'med' : 'low';
+
+    div.innerHTML = `
+      <div class="squad-avatar">${initial}</div>
+      <div class="squad-info">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span class="squad-name">${member.name}</span>
+          <span class="squad-status ${member.status === 'DOWN' ? 'down' : ''}">${member.status}</span>
+        </div>
+        <div class="squad-hp"><div class="squad-hp-fill ${hpClass}" style="width:${member.hp}%"></div></div>
+      </div>
+    `;
+    container.appendChild(div);
   });
-  document.addEventListener('keyup', (e) => { state.keys[e.code] = false; });
+}
 
-  document.addEventListener('mousemove', (e) => {
-    if (state.mouse.locked) {
-      state.mouse.x -= e.movementX * 0.002;
-      state.mouse.y -= e.movementY * 0.002;
-      state.mouse.y = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, state.mouse.y));
-    }
+// ============================================
+// KILL FEED
+// ============================================
+function addKillFeed(killer: string, victim: string, weapon: string): void {
+  const feed = document.getElementById('kill-feed');
+  if (!feed) return;
+  const entry = document.createElement('div');
+  entry.className = 'kill-entry';
+  entry.innerHTML = `<span class="killer">${killer}</span> ▸ <span class="weapon">${weapon}</span> ▸ <span class="victim">${victim}</span>`;
+  feed.appendChild(entry);
+  requestAnimationFrame(() => entry.classList.add('visible'));
+
+  setTimeout(() => {
+    entry.classList.remove('visible');
+    setTimeout(() => entry.remove(), 400);
+  }, 5000);
+}
+
+// ============================================
+// INTERACTION PROMPT
+// ============================================
+const pickMessages = [
+  { text: 'PICK UP M4A1 AMMO', sub: '5.56mm · 30 rounds' },
+  { text: 'PICK UP MEDKIT', sub: '+25 HP' },
+  { text: 'PICK UP KEVLAR VEST', sub: 'Armor · Lvl 2' },
+  { text: 'PICK UP AWM', sub: '.300 Win Mag · 5 rounds' },
+  { text: 'PICK UP FRAG GRENADE', sub: 'Throwable · Explosive' },
+  { text: 'PICK UP ENERGY DRINK', sub: 'Sprint boost · 30s' },
+  { text: 'ENTER VEHICLE', sub: 'UAZ · 4 seats' },
+];
+
+function showInteraction(msg: { text: string; sub: string }): void {
+  const prompt = document.getElementById('interaction');
+  const textEl = document.getElementById('interaction-text');
+  const subEl = document.getElementById('interaction-sub');
+  if (!prompt || !textEl || !subEl) return;
+
+  textEl.textContent = msg.text;
+  subEl.textContent = msg.sub;
+  prompt.classList.add('visible');
+}
+
+function hideInteraction(): void {
+  const prompt = document.getElementById('interaction');
+  if (prompt) prompt.classList.remove('visible');
+}
+
+// ============================================
+// ZONE WARNING
+// ============================================
+function showZoneWarning(phase: number, sub: string): void {
+  const warn = document.getElementById('zone-warning');
+  const subEl = document.getElementById('zone-warning-sub');
+  if (!warn || !subEl) return;
+  subEl.textContent = sub;
+  warn.classList.add('visible');
+}
+
+function hideZoneWarning(): void {
+  const warn = document.getElementById('zone-warning');
+  if (warn) warn.classList.remove('visible');
+}
+
+// ============================================
+// RADAR CANVAS
+// ============================================
+function drawRadar(): void {
+  const canvas = document.getElementById('radar-canvas') as HTMLCanvasElement | null;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  const cx = w / 2;
+  const cy = h / 2;
+  const radius = w / 2 - 10;
+
+  // Clear
+  ctx.fillStyle = 'rgba(15,15,20,0.6)';
+  ctx.fillRect(0, 0, w, h);
+
+  // Outer ring
+  ctx.strokeStyle = 'rgba(0,180,255,0.3)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Crosshair lines
+  ctx.strokeStyle = 'rgba(0,180,255,0.15)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - radius); ctx.lineTo(cx, cy + radius);
+  ctx.moveTo(cx - radius, cy); ctx.lineTo(cx + radius, cy);
+  ctx.stroke();
+
+  // Zone (shrinking circle)
+  const zoneR = radius * (0.6 + Math.sin(Date.now() / 3000) * 0.1);
+  ctx.strokeStyle = 'rgba(0,180,255,0.8)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.arc(cx, cy, zoneR, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Next zone (orange)
+  const nextR = radius * 0.4;
+  ctx.strokeStyle = 'rgba(255,140,0,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([2, 4]);
+  ctx.beginPath();
+  ctx.arc(cx + 20, cy - 15, nextR, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Player dot
+  ctx.fillStyle = '#00b4ff';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Player direction
+  ctx.strokeStyle = '#00b4ff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx, cy - 12);
+  ctx.stroke();
+
+  // Enemy dots
+  const enemyPositions = [
+    { x: 0.2, y: -0.3 }, { x: -0.4, y: 0.2 }, { x: 0.3, y: 0.4 },
+  ];
+  enemyPositions.forEach(p => {
+    if (Math.sin(Date.now() / 2000 + p.x * 10) > 0.3) return; // intermittent
+    ctx.fillStyle = '#dc3232';
+    ctx.beginPath();
+    ctx.arc(cx + p.x * radius, cy + p.y * radius, 3, 0, Math.PI * 2);
+    ctx.fill();
   });
 
-  document.addEventListener('mousedown', (e) => {
-    if (e.button === 0 && state.mouse.locked) { // Left click - fire
-      weaponSystem.fire();
-    }
-    if (e.button === 1) { // Middle click - lock mouse
-      lockMouse();
-    }
+  // Squad dots
+  squad.forEach((m, i) => {
+    if (m.status !== 'ALIVE') return;
+    const angle = (i / squad.length) * Math.PI * 2 + Date.now() / 10000;
+    const dist = radius * 0.4;
+    ctx.fillStyle = '#00cc66';
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(angle) * dist, cy + Math.sin(angle) * dist, 2.5, 0, Math.PI * 2);
+    ctx.fill();
   });
+}
 
-  document.addEventListener('mouseup', (e) => {
-    if (e.button === 0) { weaponSystem.stopFire(); }
-  });
-
-  document.addEventListener('contextmenu', (e) => e.preventDefault());
-
-  document.addEventListener('wheel', (e) => {
-    if (state.isADS) {
-      camera.fov = Math.max(30, Math.min(70, camera.fov - e.deltaY * 0.05));
-      camera.updateProjectionMatrix();
-    }
-  });
-
-  // Pointer lock
-  function lockMouse() {
-    renderer.domElement.requestPointerLock();
+// ============================================
+// GAS VIGNETTE
+// ============================================
+function updateGasEffect(intensity: number): void {
+  const vignette = document.getElementById('gas-vignette');
+  if (vignette) {
+    vignette.style.opacity = (intensity * 0.5).toString();
+    vignette.style.background = `radial-gradient(ellipse at center, transparent 30%, rgba(0,100,50,${intensity * 0.6}) 80%)`;
   }
-  renderer.domElement.addEventListener('click', lockMouse);
-  document.addEventListener('pointerlockchange', () => {
-    state.mouse.locked = document.pointerLockElement === renderer.domElement;
-  });
-
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    minimap.resize();
-  });
 }
 
-function handleKeyPress(code: string) {
-  switch (code) {
-    case 'Tab':
-      inventoryUI.toggle();
+// ============================================
+// SIMULATION CONTROLS
+// ============================================
+(window as any).simReload = function (): void {
+  if (state.isReloading) return;
+  if (state.ammo === state.maxAmmo || state.ammoReserve <= 0) return;
+
+  state.isReloading = true;
+  const reloadText = document.getElementById('reload-text');
+  reloadText?.classList.add('visible');
+
+  setTimeout(() => {
+    const needed = state.maxAmmo - state.ammo;
+    const taken = Math.min(needed, state.ammoReserve);
+    state.ammo += taken;
+    state.ammoReserve -= taken;
+    state.isReloading = false;
+    reloadText?.classList.remove('visible');
+    updateHUD();
+  }, 2200);
+};
+
+(window as any).simDamage = function (): void {
+  state.health = Math.max(0, state.health - 15);
+  updateHUD();
+};
+
+(window as any).simHeal = function (): void {
+  state.health = Math.min(state.maxHealth, state.health + 25);
+  updateHUD();
+};
+
+(window as any).simPickup = function (): void {
+  const msg = pickMessages[Math.floor(Math.random() * pickMessages.length)];
+  showInteraction(msg);
+  setTimeout(() => hideInteraction(), 2500);
+};
+
+(window as any).simKill = function (): void {
+  const killers = ['Ghost_42', 'Recon_07', 'Viper', 'Sniper_K', 'Rusher66'];
+  const victims = ['Runner99', 'Camper_1', 'NoobMaster', 'Loot_Goblin', 'AFK_Andy'];
+  const weapons = ['AK-74', 'AWM', 'M416', 'Groza', 'Pan'];
+  const k = killers[Math.floor(Math.random() * killers.length)];
+  const v = victims[Math.floor(Math.random() * victims.length)];
+  const w = weapons[Math.floor(Math.random() * weapons.length)];
+  addKillFeed(k, v, w);
+};
+
+// ============================================
+// KEYBOARD INPUT
+// ============================================
+document.addEventListener('keydown', (e: KeyboardEvent) => {
+  const key = e.key.toLowerCase();
+  switch (key) {
+    case 'r': (window as any).simReload(); break;
+    case 'h': (window as any).simDamage(); break;
+    case 'e': (window as any).simPickup(); break;
+    case 'b':
+      state.fireMode = state.fireMode === 'AUTO' ? 'SEMI' : 'AUTO';
+      updateHUD();
       break;
-    case 'KeyM':
-      minimap.toggle();
-      break;
-    case 'KeyV':
-      weaponSystem.melee();
-      break;
-    case 'KeyG':
-      weaponSystem.throwGrenade();
-      break;
-    case 'KeyR':
-      weaponSystem.reload();
-      break;
-    case 'KeyB':
-      weaponSystem.toggleFireMode();
-      break;
-    case 'ShiftLeft':
-      break;
-    case 'ControlLeft':
-      if (state.player.isSprinting) {
-        movementSystem.startSlide();
-      }
-      break;
-    case 'KeyC':
-      movementSystem.toggleCrouch();
-      break;
-    case 'KeyZ':
-      movementSystem.toggleProne();
-      break;
-    case 'Space':
-      if (state.player.stance === 'Prone') movementSystem.toggleProne();
-      else movementSystem.jump();
-      break;
-    case 'KeyE':
+    case ' ':
+      // Random kill on space (for testing)
+      (window as any).simKill();
       break;
   }
-}
+  // Also bind to debug buttons functions globally
+});
 
-function lockMouse() {
-  renderer.domElement.requestPointerLock();
-}
+// Prevent tab navigation
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') e.preventDefault();
+});
 
 // ============================================
-// SYSTEMS
+// ALIVE COUNTER TICK DOWN
 // ============================================
+let aliveInterval = setInterval(() => {
+  if (state.alive > 1) {
+    state.alive -= Math.random() < 0.6 ? 1 : 0;
+    if (state.alive < 1) state.alive = 1;
+    updateHUD();
+  } else {
+    clearInterval(aliveInterval);
+  }
+}, 800 + Math.random() * 1500);
 
-let movementSystem: MovementSystem;
-let zoneSystem: ZoneSystem;
-let weaponSystem: WeaponSystem;
-let hud: HUD;
-let minimap: Minimap;
-let inventoryUI: InventoryUI;
+// ============================================
+// ZONE PHASE INCREMENT
+// ============================================
+let zoneInterval = setInterval(() => {
+  if (state.zonePhase < 8) {
+    state.zonePhase++;
+    updateHUD();
+    showZoneWarning(state.zonePhase, `Zone ${state.zonePhase} incoming!`);
+    setTimeout(() => hideZoneWarning(), 4500);
+    addKillFeed('【ZONE】', `Phase ${state.zonePhase}`, 'SHRINK');
+  } else {
+    clearInterval(zoneInterval);
+  }
+}, 60000); // every 60 seconds
 
-function initSystems() {
-  movementSystem = new MovementSystem(state, camera, scene);
-  zoneSystem = new ZoneSystem(state, scene);
-  weaponSystem = new WeaponSystem(state, camera, scene);
-  hud = new HUD(state);
-  minimap = new Minimap(state);
-  inventoryUI = new InventoryUI(state);
+// ============================================
+// AUTO FIRE (hold mouse)
+// ============================================
+let isFiring = false;
+let fireInterval: number | null = null;
 
-  // Initialize demo weapon
-  state.player.currentWeapon = {
-    Id: 'AK74', Name: 'AK-74', Class: 'AR', Model: '', ViewModel: '', Icon: '',
-    Stats: {
-      Damage: 36, FireRate: 600, MuzzleVelocity: 800, Range: 600,
-      RecoilPattern: {}, RecoilRecovery: 8, Spread: 0.04, SpreadADS: 0.01,
-      SpreadMove: 0.08, SpreadJump: 0.15, ReloadTime: 2.8, TacticalReloadTime: 2.2,
-      MagSize: 30, AmmoType: '7.62x39', Weight: 3.5, AdsTime: 0.25, Sway: 1.2,
-      Penetration: 1.5, BulletDrop: 0.05,
-    },
-    Attachments: {}, Animations: {}, Sounds: {}, Rarity: 'Common', Price: { Cash: 0, Credits: 0 },
+function startFire(): void {
+  if (isFiring) return;
+  isFiring = true;
+  const fire = () => {
+    if (state.ammo > 0 && !state.isReloading) {
+      state.ammo--;
+      updateHUD();
+    } else {
+      stopFire();
+    }
   };
-  state.player.maxAmmo = state.player.currentWeapon.Stats.MagSize;
-  state.player.ammo = state.player.maxAmmo;
-
-  // Start zone
-  zoneSystem.startMatch();
+  fire();
+  fireInterval = window.setInterval(fire, 100); // 600 RPM
 }
+
+function stopFire(): void {
+  isFiring = false;
+  if (fireInterval) { clearInterval(fireInterval); fireInterval = null; }
+}
+
+document.addEventListener('mousedown', (e) => {
+  const target = e.target as HTMLElement;
+  // Prevent firing when clicking buttons
+  if (target.classList.contains('debug-btn')) return;
+  if (e.button === 0) startFire();
+});
+document.addEventListener('mouseup', stopFire);
 
 // ============================================
 // MAIN LOOP
 // ============================================
-
-function animate() {
-  requestAnimationFrame(animate);
-  const delta = clock.getDelta();
-
-  // Update systems
-  movementSystem.update(delta);
-  zoneSystem.update(delta);
-  weaponSystem.update(delta);
-  hud.update();
-  minimap.update();
-
-  // Camera follow
-  const targetPos = new THREE.Vector3(...state.player.position);
-  camera.position.lerp(targetPos, 0.15);
-  camera.rotation.order = 'YXZ';
-  camera.rotation.y = state.mouse.x;
-  camera.rotation.x = state.mouse.y;
-
-  // Apply lean
-  camera.rotation.z = state.player.lean * 0.15;
-
-  // Apply ADS FOV
-  if (state.isADS) {
-    camera.fov = THREE.MathUtils.lerp(camera.fov, 45, delta * 10);
-  } else {
-    camera.fov = THREE.MathUtils.lerp(camera.fov, 70, delta * 10);
-  }
-  camera.updateProjectionMatrix();
-
-  // Render
-  renderer.render(scene, camera);
+function loop(): void {
+  drawRadar();
+  // Random gas effect fluctuation for testing
+  const gasIntensity = (Math.sin(Date.now() / 4000) + 1) / 2 * 0.3;
+  updateGasEffect(gasIntensity);
+  requestAnimationFrame(loop);
 }
 
 // ============================================
 // START
 // ============================================
-
-async function start() {
+function start(): void {
   // Hide loading
-  document.getElementById('loading')!.style.display = 'none';
+  const loading = document.getElementById('loading');
+  if (loading) {
+    loading.style.opacity = '0';
+    setTimeout(() => { loading.style.display = 'none'; }, 300);
+  }
 
-  initThree();
-  initInput();
-  initSystems();
-  animate();
+  renderSquad();
+  updateHUD();
+  loop();
 
-  // Add demo kill feed entries
-  setTimeout(() => hud.addKillFeed('Player1', 'Player2', 'AK-74'), 3000);
-  setTimeout(() => hud.addKillFeed('Player3', 'Player4', 'AWM'), 6000);
-  setTimeout(() => hud.showZoneWarning(2, 'Next zone in 30s'), 8000);
-  setTimeout(() => hud.hideZoneWarning(), 12000);
+  // Auto demo events
+  setTimeout(() => addKillFeed('Ghost_42', 'Loot_Goblin', 'AK-74'), 3000);
+  setTimeout(() => addKillFeed('Recon_07', 'Camper_1', 'AWM'), 7000);
+  setTimeout(() => showInteraction(pickMessages[0]), 5000);
+  setTimeout(() => hideInteraction(), 9000);
+  setTimeout(() => addKillFeed('Viper_X', 'NoobMaster', 'Groza'), 12000);
 
-  console.log('🎮 Battle Royale Web Demo Started!');
-  console.log('Controls: WASD Move | Shift Sprint | C Crouch | Z Prone | Ctrl Slide | Space Jump');
-  console.log('Mouse: Click to lock | Left Click Fire | Right Click ADS | Scroll Zoom');
-  console.log('Keys: R Reload | B Fire Mode | V Melee | G Grenade | Tab Inventory | M Map');
+  console.log('🎮 Battle Royale HUD Prototype Started!');
+  console.log('● Press R or click [Reload] — reload animation');
+  console.log('● Press H or click [Damage] — lose 15 HP');
+  console.log('● Press E or click [Pickup] — show loot prompt');
+  console.log('● Press B — toggle AUTO/SEMI');
+  console.log('● Click on screen — fire weapon (decreases ammo)');
+  console.log('● Press Space — random kill feed entry');
+  console.log('● Alive counter ticks down automatically');
+  console.log('● Zone increments every 60 seconds');
 }
 
-start().catch(console.error);
+start();
