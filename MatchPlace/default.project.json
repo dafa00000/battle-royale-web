@@ -1,0 +1,35 @@
+{
+	"name": "BattleRoyaleMatch",
+	"servePort": 34873,
+	"tree": {
+		"$className": "DataModel",
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"Shared": { "$path": "Shared" },
+			"Remotes": {
+				"$className": "Folder",
+				"MatchRemotes": { "$path": "Shared/Remotes/MatchRemotes.luau" }
+			},
+			"Assets": { "$path": "ReplicatedStorage/Assets" },
+			"Modules": { "$path": "MatchPlace/ReplicatedStorage/Modules" },
+			"SharedPackages": { "$path": "SharedPackages" }
+		},
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
+			"Match": { "$path": "MatchPlace/ServerScriptService/Match" },
+			"Combat": { "$path": "MatchPlace/ServerScriptService/Combat" },
+			"Movement": { "$path": "MatchPlace/ServerScriptService/Movement" },
+			"Vehicle": { "$path": "MatchPlace/ServerScriptService/Vehicle" },
+			"Inventory": { "$path": "MatchPlace/ServerScriptService/Inventory" },
+			"Data": { "$path": "MatchPlace/ServerScriptService/Data" }
+		},
+		"StarterPlayer": {
+			"$className": "StarterPlayer",
+			"StarterPlayerScripts": { "$path": "MatchPlace/StarterPlayer/StarterPlayerScripts" }
+		},
+		"StarterGui": {
+			"$className": "StarterGui",
+			"MatchGui": { "$path": "MatchPlace/StarterGui/MatchGui.luau" }
+		}
+	}
+}

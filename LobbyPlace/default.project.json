@@ -1,0 +1,30 @@
+{
+	"name": "BattleRoyaleLobby",
+	"servePort": 34872,
+	"tree": {
+		"$className": "DataModel",
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"Shared": { "$path": "Shared" },
+			"Remotes": {
+				"$className": "Folder",
+				"LobbyRemotes": { "$path": "Shared/Remotes/LobbyRemotes.luau" }
+			},
+			"Assets": { "$path": "ReplicatedStorage/Assets" },
+			"SharedPackages": { "$path": "SharedPackages" }
+		},
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
+			"Lobby": { "$path": "LobbyPlace/ServerScriptService/Lobby" },
+			"Data": { "$path": "LobbyPlace/ServerScriptService/Data" }
+		},
+		"StarterPlayer": {
+			"$className": "StarterPlayer",
+			"StarterPlayerScripts": { "$path": "LobbyPlace/StarterPlayer/StarterPlayerScripts" }
+		},
+		"StarterGui": {
+			"$className": "StarterGui",
+			"LobbyGui": { "$path": "LobbyPlace/StarterGui/LobbyGui.luau" }
+		}
+	}
+}

@@ -1,0 +1,12 @@
+{
+  "name": "BattleRoyaleRoot",
+  "servePort": 34874,
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "Shared": { "$path": "Shared" },
+      "SharedPackages": { "$path": "SharedPackages" }
+    }
+  }
+}

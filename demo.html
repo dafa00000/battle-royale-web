@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battle Royale - Architecture Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --bg-elevated: #12121a;
+            --surface: #1a1a24;
+            --border: #2a2a3a;
+            --primary: #00b4ff;
+            --primary-dim: #0088cc;
+            --secondary: #ff8c00;
+            --danger: #dc3232;
+            --success: #32c864;
+            --text: #f0f0f0;
+            --text-muted: #a0a0a0;
+            --accent: #b450ff;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Background pattern */
+        .bg-pattern {
+            position: fixed;
+            inset: 0;
+            background-image: 
+                radial-gradient(circle at 20% 80%, rgba(0,180,255,0.03) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255,140,0,0.03) 0%, transparent 50%),
+                linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.5) 100%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        .grid-overlay {
+            position: fixed;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(0,180,255,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,180,255,0.02) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+        
+        /* Animations */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 20px rgba(0,180,255,0.2); }
+            50% { box-shadow: 0 0 40px rgba(0,180,255,0.4); }
+        }
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(30px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+        .animate-slide-in { animation: slideInRight 0.5s ease-out forwards; }
+        .delay-1 { animation-delay: 0.1s; opacity: 0; }
+        .delay-2 { animation-delay: 0.2s; opacity: 0; }
+        .delay-3 { animation-delay: 0.3s; opacity: 0; }
+        .delay-4 { animation-delay: 0.4s; opacity: 0; }
+        .delay-5 { animation-delay: 0.5s; opacity: 0; }
+        
+        /* Cards */
+        .system-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .system-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .system-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+        .system-card:hover::before { opacity: 1; }
+        
+        /* File tree */
+        .file-tree { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; line-height: 1.8; }
+        .file-tree .folder { color: var(--secondary); font-weight: 600; }
+        .file-tree .file { color: var(--text-muted); }
+        .file-tree .file-key { color: var(--primary); font-weight: 500; }
+        .file-tree .indent { padding-left: 1.5rem; }
+        .file-tree .branch::before { content: "├── "; color: var(--border); }
+        .file-tree .last::before { content: "└── "; color: var(--border); }
+        
+        /* Stats */
+        .stat-card {
+            background: linear-gradient(135deg, var(--surface) 0%, var(--bg-elevated) 100%);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+        .stat-value { font-size: 2.5rem; font-weight: 700; background: linear-gradient(135deg, var(--primary), var(--secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .stat-label { color: var(--text-muted); font-size: 0.875rem; margin-top: 0.5rem; }
+        
+        /* Tabs */
+        .tab-btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+        }
+        .tab-btn.active, .tab-btn:hover {
+            background: var(--surface);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeInUp 0.3s; }
+        
+        /* Weapon cards */
+        .weapon-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            transition: all 0.2s;
+        }
+        .weapon-card:hover { border-color: var(--primary); }
+        .weapon-rarity-common { border-left: 3px solid #b4b4b4; }
+        .weapon-rarity-uncommon { border-left: 3px solid #32c832; }
+        .weapon-rarity-rare { border-left: 3px solid #3296ff; }
+        .weapon-rarity-epic { border-left: 3px solid #b432ff; }
+        .weapon-rarity-legendary { border-left: 3px solid #ffb400; }
+        
+        /* Architecture diagram */
+        .arch-node {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem 1.5rem;
+            font-weight: 500;
+            position: relative;
+            min-width: 160px;
+            text-align: center;
+        }
+        .arch-node.server { border-color: var(--danger); background: linear-gradient(135deg, rgba(220,50,50,0.1), var(--surface)); }
+        .arch-node.client { border-color: var(--primary); background: linear-gradient(135deg, rgba(0,180,255,0.1), var(--surface)); }
+        .arch-node.shared { border-color: var(--secondary); background: linear-gradient(135deg, rgba(255,140,0,0.1), var(--surface)); }
+        .arch-arrow { color: var(--border); font-size: 1.5rem; }
+        
+        /* Glow button */
+        .btn-glow {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dim));
+            color: #000;
+            font-weight: 600;
+            padding: 1rem 2rem;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 20px rgba(0,180,255,0.3);
+        }
+        .btn-glow:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0,180,255,0.5);
+        }
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
+        
+        /* Code block */
+        .code-block {
+            background: #080810;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            overflow-x: auto;
+            line-height: 1.6;
+        }
+        .code-comment { color: #6a6a6a; }
+        .code-keyword { color: #c586c0; }
+        .code-string { color: #ce9178; }
+        .code-function { color: #dcdcaa; }
+        .code-type { color: #4ec9b0; }
+        
+        /* Reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-pattern"></div>
+    <div class="grid-overlay"></div>
+
+    <!-- Navigation -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-[rgba(10,10,15,0.95)] backdrop-blur-md border-b border-[var(--border)]">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--accent)] flex items-center justify-center">
+                    <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </div>
+                <span class="font-mono text-xl font-bold bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] bg-clip-text text-transparent">BATTLE_ROYALE</span>
+            </div>
+            <div class="hidden md:flex items-center gap-6">
+                <a href="#overview" class="text-sm text-[var(--text-muted)] hover:text-[var(--primary)] transition">Overview</a>
+                <a href="#architecture" class="text-sm text-[var(--text-muted)] hover:text-[var(--primary)] transition">Architecture</a>
+                <a href="#systems" class="text-sm text-[var(--text-muted)] hover:text-[var(--primary)] transition">Systems</a>
+                <a href="#files" class="text-sm text-[var(--text-muted)] hover:text-[var(--primary)] transition">File Tree</a>
+                <a href="#weapons" class="text-sm text-[var(--text-muted)] hover:text-[var(--primary)] transition">Weapons</a>
+                <a href="#setup" class="text-sm text-[var(--text-muted)] hover:text-[var(--primary)] transition">Setup</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="min-h-screen flex items-center justify-center pt-20 px-6">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16 animate-fade-in-up">
+                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--surface)] border border-[var(--border)] mb-6">
+                    <span class="w-2 h-2 rounded-full bg-[var(--success)] animate-pulse"></span>
+                    <span class="text-sm font-mono text-[var(--text-muted)]">PRODUCTION READY • 62 FILES • 562 KB</span>
+                </div>
+                <h1 class="text-5xl md:text-7xl font-bold mb-6 tracking-tight">
+                    Battle Royale <br><span class="font-mono text-[var(--primary)]">Foundation</span>
+                </h1>
+                <p class="text-xl md:text-2xl text-[var(--text-muted)] max-w-3xl mx-auto mb-8 leading-relaxed">
+                    Complete Roblox Battle Royale codebase — Rojo + Wally + Luau strict types.
+                    Server-authoritative architecture with client prediction, anti-cheat hit validation,
+                    constraint-based vehicles, PBR visual pipeline, and GTA V style UI.
+                </p>
+                <div class="flex flex-wrap items-center justify-center gap-4">
+                    <button class="btn-glow text-lg px-8 py-4" onclick="scrollToSection('setup')">Quick Start</button>
+                    <button class="btn-ghost text-lg px-8 py-4" onclick="scrollToSection('architecture')">View Architecture</button>
+                </div>
+            </div>
+            
+            <!-- Stats -->
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
+                <div class="stat-card animate-fade-in-up delay-1">
+                    <div class="stat-value">62</div>
+                    <div class="stat-label">Luau Files</div>
+                </div>
+                <div class="stat-card animate-fade-in-up delay-2">
+                    <div class="stat-value">562</div>
+                    <div class="stat-label">KB Total</div>
+                </div>
+                <div class="stat-card animate-fade-in-up delay-3">
+                    <div class="stat-value">14</div>
+                    <div class="stat-label">Systems</div>
+                </div>
+                <div class="stat-card animate-fade-in-up delay-4">
+                    <div class="stat-value">12</div>
+                    <div class="stat-label">Weapons</div>
+                </div>
+                <div class="stat-card animate-fade-in-up delay-5">
+                    <div class="stat-value">2</div>
+                    <div class="stat-label">Places</div>
+                </div>
+                <div class="stat-card animate-fade-in-up" style="animation-delay: 0.6s;">
+                    <div class="stat-value">0</div>
+                    <div class="stat-label">Errors</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture -->
+    <section id="architecture" class="py-24 px-6">
+        <div class="max-w-7xl mx-auto">
+            <header class="text-center mb-16 animate-fade-in-up">
+                <span class="font-mono text-[var(--primary)] text-sm">ARCHITECTURE</span>
+                <h2 class="text-4xl md:text-5xl font-bold mt-2">Multi-Place Rojo Architecture</h2>
+                <p class="text-[var(--text-muted)] mt-4 max-w-2xl mx-auto">Lobby & Match places sync via Shared modules. Server-authoritative with client prediction.</p>
+            </header>
+
+            <!-- Data Flow Diagram -->
+            <div class="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-8 mb-12 animate-fade-in-up delay-1">
+                <h3 class="text-lg font-semibold mb-6 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                    Data Flow
+                </h3>
+                <div class="flex flex-col md:flex-row items-center gap-4 overflow-x-auto pb-4">
+                    <!-- Client -->
+                    <div class="arch-node client flex-shrink-0">
+                        <div class="text-xs text-[var(--text-muted)] mb-1">CLIENT</div>
+                        <div>StarterPlayerScripts</div>
+                        <div class="text-xs text-[var(--primary)] mt-1">CameraController • WeaponController • MovementController</div>
+                    </div>
+                    <div class="arch-arrow hidden md:block">→</div>
+                    <div class="arch-arrow md:hidden">↓</div>
+                    <!-- RemoteEvents -->
+                    <div class="arch-node shared flex-shrink-0">
+                        <div class="text-xs text-[var(--text-muted)] mb-1">NETWORK</div>
+                        <div>ReplicatedStorage.Remotes</div>
+                        <div class="text-xs text-[var(--secondary)] mt-1">MatchRemotes • LobbyRemotes</div>
+                    </div>
+                    <div class="arch-arrow hidden md:block">→</div>
+                    <div class="arch-arrow md:hidden">↓</div>
+                    <!-- Server -->
+                    <div class="arch-node server flex-shrink-0">
+                        <div class="text-xs text-[var(--text-muted)] mb-1">SERVER</div>
+                        <div>ServerScriptService</div>
+                        <div class="text-xs text-[var(--danger)] mt-1">MatchController • SafeZoneService • DamageService</div>
+                    </div>
+                    <div class="arch-arrow hidden md:block">↔</div>
+                    <div class="arch-arrow md:hidden">↓</div>
+                    <!-- Shared -->
+                    <div class="arch-node shared flex-shrink-0">
+                        <div class="text-xs text-[var(--text-muted)] mb-1">SHARED</div>
+                        <div>ReplicatedStorage.Modules</div>
+                        <div class="text-xs text-[var(--secondary)] mt-1">WeaponSystem • Movement • Vehicle • Audio • Camera</div>
+                    </div>
+                    <div class="arch-arrow hidden md:block">↔</div>
+                    <div class="arch-arrow md:hidden">↓</div>
+                    <!-- Data -->
+                    <div class="arch-node server flex-shrink-0">
+                        <div class="text-xs text-[var(--text-muted)] mb-1">PERSISTENCE</div>
+                        <div>DataManager (ProfileService)</div>
+                        <div class="text-xs text-[var(--success)] mt-1">PlayerProfile • Inventory • Loadout • Stats</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Place Structure -->
+            <div class="grid md:grid-cols-2 gap-6 animate-fade-in-up delay-2">
+                <div class="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6">
+                    <h3 class="font-semibold mb-4 flex items-center gap-2 text-[var(--primary)]">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                        LobbyPlace (Port 34872)
+                    </h3>
+                    <div class="file-tree text-sm space-y-1">
+                        <div class="folder">ServerScriptService/</div>
+                        <div class="indent branch">Lobby/</div>
+                        <div class="indent branch file-key">MatchmakingService.luau</div>
+                        <div class="indent branch file-key">SquadService.luau</div>
+                        <div class="indent branch file-key">LoadoutService.luau</div>
+                        <div class="indent branch">Data/</div>
+                        <div class="indent last file-key">DataManager.luau</div>
+                        <div class="folder mt-2">StarterPlayerScripts/</div>
+                        <div class="indent branch file-key">LobbyClient.luau</div>
+                        <div class="indent branch">UI/</div>
+                        <div class="indent last file-key">MainMenu • SquadUI • LoadoutUI</div>
+                    </div>
+                </div>
+                <div class="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6">
+                    <h3 class="font-semibold mb-4 flex items-center gap-2 text-[var(--danger)]">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        MatchPlace (Port 34873)
+                    </h3>
+                    <div class="file-tree text-sm space-y-1">
+                        <div class="folder">ServerScriptService/</div>
+                        <div class="indent branch">Match/</div>
+                        <div class="indent branch file-key">MatchController • PlayerManager</div>
+                        <div class="indent branch file-key">SafeZoneService • VehicleService</div>
+                        <div class="indent branch file-key">LootSpawner • EconomyService</div>
+                        <div class="indent branch">Combat/</div>
+                        <div class="indent branch file-key">DamageService • HitValidation • ProjectileService</div>
+                        <div class="indent last">Data/MatchDataStore.luau</div>
+                        <div class="folder mt-2">ReplicatedStorage/Modules/</div>
+                        <div class="indent branch">WeaponSystem/ (RaycastWeapon, Ballistics, RecoilPattern, HitValidation)</div>
+                        <div class="indent branch">Movement/ (StanceSystem, Vaulting, SlideSystem)</div>
+                        <div class="indent branch">Vehicle/ (ChassisController, DeformationSystem, EngineAudio)</div>
+                        <div class="indent branch">Inventory/ (InventoryManager, ItemDefinitions, WorldLootUI)</div>
+                        <div class="indent branch">Zone/ (SafeZoneController, GasEffects, ZoneVisuals)</div>
+                        <div class="indent branch">Audio/ (OcclusionSystem, ReverbZones, FootstepAudio)</div>
+                        <div class="indent last">Camera/ (OTSCamera, CameraShake, ADSCamera)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Systems -->
+    <section id="systems" class="py-24 px-6 bg-[var(--bg-elevated)]">
+        <div class="max-w-7xl mx-auto">
+            <header class="text-center mb-16 animate-fade-in-up">
+                <span class="font-mono text-[var(--primary)] text-sm">SYSTEMS</span>
+                <h2 class="text-4xl md:text-5xl font-bold mt-2">Production-Grade Systems</h2>
+            </header>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- System Cards -->
+                <div class="system-card animate-fade-in-up delay-1">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--accent)] flex items-center justify-center">
+                            <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        </div>
+                        <span class="text-xs font-mono text-[var(--primary)]">SERVER</span>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">Safe Zone</h3>
+                    <p class="text-[var(--text-muted)] mb-4">7-phase dynamic zone with TweenService sync, warning timers, DOT damage, PBR gas wall shader.</p>
+                    <div class="flex flex-wrap gap-1">
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Phases</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">TweenSync</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">GasVFX</span>
+                    </div>
+                </div>
+
+                <div class="system-card animate-fade-in-up delay-2">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--danger)] to-[#ff6b6b] flex items-center justify-center">
+                            <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121A9 9 0 0112 21a9 9 0 01-2.121-6.879M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        </div>
+                        <span class="text-xs font-mono text-[var(--danger)]">SHARED</span>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">Weapon System</h3>
+                    <p class="text-[var(--text-muted)] mb-4">Raycast + ballistic drop + penetration. Deterministic recoil patterns. Server hit validation (origin/time/direction/damage/LOS).</p>
+                    <div class="flex flex-wrap gap-1">
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Raycast</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Ballistics</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">AntiCheat</span>
+                    </div>
+                </div>
+
+                <div class="system-card animate-fade-in-up delay-3">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--secondary)] to-[#ffaa00] flex items-center justify-center">
+                            <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
+                        </div>
+                        <span class="text-xs font-mono text-[var(--secondary)]">SHARED</span>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">Movement</h3>
+                    <p class="text-[var(--text-muted)] mb-4">Stand/Crouch/Prone state machine with smooth HipHeight/WalkSpeed interpolation. Auto-vault ≤4.5studs. Tactical slide 35studs/s with friction decel.</p>
+                    <div class="flex flex-wrap gap-1">
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Stance</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Vault</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Slide</span>
+                    </div>
+                </div>
+
+                <div class="system-card animate-fade-in-up delay-4">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--accent)] to-[#d080ff] flex items-center justify-center">
+                            <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                        </div>
+                        <span class="text-xs font-mono text-[var(--accent)]">SHARED</span>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">Vehicles</h3>
+                    <p class="text-[var(--text-muted)] mb-4">Constraint-based chassis: SpringConstraint suspension, CylindricalConstraint drive, HingeConstraint steering. Network ownership to driver. Mesh deformation on impact.</p>
+                    <div class="flex flex-wrap gap-1">
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Constraints</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Deformation</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">EngineAudio</span>
+                    </div>
+                </div>
+
+                <div class="system-card animate-fade-in-up delay-5">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--success)] to-[#4ade80] flex items-center justify-center">
+                            <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                        </div>
+                        <span class="text-xs font-mono text-[var(--success)]">SHARED</span>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">Inventory</h3>
+                    <p class="text-[var(--text-muted)] mb-4">30-slot grid + 5 hotbar. Weight system. Drag-drop UI. World loot with 3D prompts. Server-authoritative with action validation (Move/Split/Drop/Use/Equip/Attach).</p>
+                    <div class="flex flex-wrap gap-1">
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Grid</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Weight</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Attachments</span>
+                    </div>
+                </div>
+
+                <div class="system-card animate-fade-in-up" style="animation-delay: 0.6s;">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[#ff6b6b] to-[var(--danger)] flex items-center justify-center">
+                            <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                        </div>
+                        <span class="text-xs font-mono text-[var(--danger)]">SERVER</span>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">Audio</h3>
+                    <p class="text-[var(--text-muted)] mb-4">Raycast occlusion every 100ms (volume × 0.7, low-pass). Reverb zones with crossfade (1.5s indoor/2s outdoor). Material-based footsteps with stance/speed scaling.</p>
+                    <div class="flex flex-wrap gap-1">
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Occlusion</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Reverb</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Footsteps</span>
+                    </div>
+                </div>
+
+                <div class="system-card animate-fade-in-up" style="animation-delay: 0.7s;">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[#00b4ff] to-[#00d4ff] flex items-center justify-center">
+                            <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                        </div>
+                        <span class="text-xs font-mono text-[var(--primary)]">CLIENT</span>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">Camera</h3>
+                    <p class="text-[var(--text-muted)] mb-4">OTS with lean (Q/E), procedural shake (trauma² decay + perlin), ADS lerp to center (FOV 45), sprint FOV 90. Smooth follow with damping.</p>
+                    <div class="flex flex-wrap gap-1">
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">OTS</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Shake</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">ADS</span>
+                    </div>
+                </div>
+
+                <div class="system-card animate-fade-in-up" style="animation-delay: 0.8s;">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--secondary)] to-[#ffaa00] flex items-center justify-center">
+                            <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </div>
+                        <span class="text-xs font-mono text-[var(--secondary)]">SERVER</span>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">Matchmaking</h3>
+                    <p class="text-[var(--text-muted)] mb-4">MemoryStore queue + TeleportService. Solo/Duo/Squad. Ready check 15s. Map selection. Auto-requeue on timeout. Cross-server via sorted map.</p>
+                    <div class="flex flex-wrap gap-1">
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">MemoryStore</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Teleport</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Squads</span>
+                    </div>
+                </div>
+
+                <div class="system-card animate-fade-in-up" style="animation-delay: 0.9s;">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--success)] to-[#4ade80] flex items-center justify-center">
+                            <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </div>
+                        <span class="text-xs font-mono text-[var(--success)]">SERVER</span>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">Data Persistence</h3>
+                    <p class="text-[var(--text-muted)] mb-4">ProfileService wrapper with session locking, auto-save 60s, reconcile on load. Match history to OrderedDataStore. Leaderboards for Wins/Kills/Top10.</p>
+                    <div class="flex flex-wrap gap-1">
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">ProfileService</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Leaderboards</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">AutoSave</span>
+                    </div>
+                </div>
+
+                <div class="system-card animate-fade-in-up" style="animation-delay: 1s;">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[#b450ff] to-[var(--accent)] flex items-center justify-center">
+                            <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+                        </div>
+                        <span class="text-xs font-mono text-[var(--accent)]">CLIENT</span>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">UI / HUD</h3>
+                    <p class="text-[var(--text-muted)] mb-4">Smartwatch HUD (health/armor/ammo/minimap). GTA V minimap with zone/squad/vehicle/loot. Loading screen cinematic. Dark translucent panels (RGBA 20,20,20,0.7). Responsive scaling.</p>
+                    <div class="flex flex-wrap gap-1">
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Smartwatch</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Minimap</span>
+                        <span class="px-2 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded">Cinematic</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- File Tree -->
+    <section id="files" class="py-24 px-6">
+        <div class="max-w-7xl mx-auto">
+            <header class="text-center mb-12 animate-fade-in-up">
+                <span class="font-mono text-[var(--primary)] text-sm">FILE TREE</span>
+                <h2 class="text-4xl md:text-5xl font-bold mt-2">Complete Project Structure</h2>
+                <p class="text-[var(--text-muted)] mt-4">62 .luau files organized in Rojo standard layout</p>
+            </header>
+
+            <div class="bg-[var(--surface)] border border-[var(--border)] rounded-2xl overflow-hidden animate-fade-in-up delay-1">
+                <div class="p-6 border-b border-[var(--border)] flex items-center justify-between">
+                    <span class="font-mono text-[var(--text-muted)]">BattleRoyale/</span>
+                    <span class="px-3 py-1 text-xs bg-[var(--bg)] border border-[var(--border)] rounded font-mono">62 files • 562 KB</span>
+                </div>
+                <pre class="file-tree p-6 text-sm overflow-x-auto"><code>├── Shared/
+│   ├── Constants.luau              <span class="text-[var(--primary)]">174 lines</span>
+│   ├── Types.luau                  <span class="text-[var(--primary)]">464 lines</span>
+│   ├── Util.luau                   <span class="text-[var(--primary)]">539 lines</span>
+│   ├── DataManager.luau            <span class="text-[var(--primary)]">448 lines</span>
+│   └── Remotes/
+│       ├── LobbyRemotes.luau       <span class="text-[var(--primary)]">154 lines</span>
+│       └── MatchRemotes.luau       <span class="text-[var(--primary)]">272 lines</span>
+├── LobbyPlace/
+│   ├── default.project.json        <span class="text-[var(--secondary)]">Port 34872</span>
+│   ├── ServerScriptService/
+│   │   ├── Lobby/
+│   │   │   ├── MatchmakingService.luau <span class="text-[var(--primary)]">380 lines</span>
+│   │   │   ├── SquadService.luau       <span class="text-[var(--primary)]">390 lines</span>
+│   │   │   └── LoadoutService.luau     <span class="text-[var(--primary)]">260 lines</span>
+│   │   └── Data/
+│   │       └── DataManager.luau        <span class="text-[var(--primary)]">60 lines</span>
+│   ├── StarterPlayer/StarterPlayerScripts/
+│   │   ├── LobbyClient.luau            <span class="text-[var(--primary)]">130 lines</span>
+│   │   └── UI/
+│   │       ├── MainMenu.luau           <span class="text-[var(--primary)]">520 lines</span>
+│   │       ├── SquadUI.luau            <span class="text-[var(--primary)]">380 lines</span>
+│   │       └── LoadoutUI.luau          <span class="text-[var(--primary)]">170 lines</span>
+│   └── StarterGui/
+│       └── LobbyGui.luau             <span class="text-[var(--primary)]">55 lines</span>
+├── MatchPlace/
+│   ├── default.project.json        <span class="text-[var(--secondary)]">Port 34873</span>
+│   ├── ReplicatedStorage/Modules/
+│   │   ├── WeaponSystem/
+│   │   │   ├── RaycastWeapon.luau    <span class="text-[var(--primary)]">510 lines</span>
+│   │   │   ├── Ballistics.luau       <span class="text-[var(--primary)]">300 lines</span>
+│   │   │   ├── RecoilPattern.luau    <span class="text-[var(--primary)]">310 lines</span>
+│   │   │   └── HitValidation.luau    <span class="text-[var(--primary)]">290 lines</span>
+│   │   ├── Movement/
+│   │   │   ├── StanceSystem.luau     <span class="text-[var(--primary)]">360 lines</span>
+│   │   │   ├── Vaulting.luau         <span class="text-[var(--primary)]">330 lines</span>
+│   │   │   └── SlideSystem.luau      <span class="text-[var(--primary)]">260 lines</span>
+│   │   ├── Vehicle/
+│   │   │   ├── ChassisController.luau <span class="text-[var(--primary)]">540 lines</span>
+│   │   │   ├── DeformationSystem.luau <span class="text-[var(--primary)]">340 lines</span>
+│   │   │   └── EngineAudio.luau      <span class="text-[var(--primary)]">350 lines</span>
+│   │   ├── Inventory/
+│   │   │   ├── InventoryManager.luau <span class="text-[var(--primary)]">510 lines</span>
+│   │   │   ├── ItemDefinitions.luau  <span class="text-[var(--primary)]">1240 lines</span>
+│   │   │   └── WorldLootUI.luau      <span class="text-[var(--primary)]">360 lines</span>
+│   │   ├── Zone/
+│   │   │   ├── SafeZoneController.luau <span class="text-[var(--primary)]">380 lines</span>
+│   │   │   ├── GasEffects.luau       <span class="text-[var(--primary)]">320 lines</span>
+│   │   │   └── ZoneVisuals.luau      <span class="text-[var(--primary)]">310 lines</span>
+│   │   ├── Audio/
+│   │   │   ├── OcclusionSystem.luau  <span class="text-[var(--primary)]">220 lines</span>
+│   │   │   ├── ReverbZones.luau      <span class="text-[var(--primary)]">190 lines</span>
+│   │   │   └── FootstepAudio.luau    <span class="text-[var(--primary)]">190 lines</span>
+│   │   └── Camera/
+│   │       ├── OTSCamera.luau        <span class="text-[var(--primary)]">290 lines</span>
+│   │       ├── CameraShake.luau      <span class="text-[var(--primary)]">105 lines</span>
+│   │       └── ADSCamera.luau        <span class="text-[var(--primary)]">98 lines</span>
+│   ├── ServerScriptService/
+│   │   ├── Match/
+│   │   │   ├── MatchController.luau  <span class="text-[var(--primary)]">403 lines</span>
+│   │   │   ├── PlayerManager.luau    <span class="text-[var(--primary)]">490 lines</span>
+│   │   │   ├── SafeZoneService.luau  <span class="text-[var(--primary)]">420 lines</span>
+│   │   │   ├── VehicleService.luau   <span class="text-[var(--primary)]">640 lines</span>
+│   │   │   ├── LootSpawner.luau      <span class="text-[var(--primary)]">510 lines</span>
+│   │   │   └── EconomyService.luau   <span class="text-[var(--primary)]">300 lines</span>
+│   │   ├── Combat/
+│   │   │   ├── DamageService.luau    <span class="text-[var(--primary)]">330 lines</span>
+│   │   │   ├── HitValidation.luau    <span class="text-[var(--primary)]">105 lines</span>
+│   │   │   └── ProjectileService.luau <span class="text-[var(--primary)]">570 lines</span>
+│   │   └── Data/
+│   │       └── MatchDataStore.luau   <span class="text-[var(--primary)]">200 lines</span>
+│   ├── StarterPlayer/StarterPlayerScripts/
+│   │   ├── MatchClient.luau          <span class="text-[var(--primary)]">460 lines</span>
+│   │   ├── CameraController.luau     <span class="text-[var(--primary)]">160 lines</span>
+│   │   ├── MovementController.luau   <span class="text-[var(--primary)]">290 lines</span>
+│   │   ├── WeaponController.luau     <span class="text-[var(--primary)]">420 lines</span>
+│   │   ├── VehicleController.luau    <span class="text-[var(--primary)]">210 lines</span>
+│   │   ├── InventoryController.luau  <span class="text-[var(--primary)]">180 lines</span>
+│   │   ├── ZoneClient.luau           <span class="text-[var(--primary)]">220 lines</span>
+│   │   ├── AudioController.luau      <span class="text-[var(--primary)]">140 lines</span>
+│   │   └── UI/
+│   │       ├── HUD.luau              <span class="text-[var(--primary)]">730 lines</span>
+│   │       ├── Minimap.luau          <span class="text-[var(--primary)]">350 lines</span>
+│   │       ├── InventoryUI.luau      <span class="text-[var(--primary)]">490 lines</span>
+│   │       └── LoadoutUI.luau        <span class="text-[var(--primary)]">390 lines</span>
+│   └── StarterGui/
+│       └── MatchGui.luau             <span class="text-[var(--primary)]">65 lines</span>
+├── wally.toml                        <span class="text-[var(--secondary)]">5 deps</span>
+├── Bootstrap.luau                    <span class="text-[var(--primary)]">230 lines</span>
+├── default.project.json              <span class="text-[var(--secondary)]">Root config</span>
+└── README.md                         <span class="text-[var(--primary)]">270 lines</span></code></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- Weapons -->
+    <section id="weapons" class="py-24 px-6 bg-[var(--bg-elevated)]">
+        <div class="max-w-7xl mx-auto">
+            <header class="text-center mb-12 animate-fade-in-up">
+                <span class="font-mono text-[var(--primary)] text-sm">ARMORY</span>
+                <h2 class="text-4xl md:text-5xl font-bold mt-2">Weapon Roster</h2>
+                <p class="text-[var(--text-muted)] mt-4">12 weapons across 8 classes with full attachment system</p>
+            </header>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <!-- Weapons -->
+                <div class="weapon-card weapon-rarity-common animate-fade-in-up delay-1">
+                    <div class="flex items-start justify-between mb-2">
+                        <h4 class="font-bold">AK-74</h4>
+                        <span class="px-2 py-0.5 text-xs bg-[var(--bg)] border border-[var(--border)] rounded font-mono">AR</span>
+                    </div>
+                    <div class="text-xs text-[var(--text-muted)] mb-3">Common</div>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div><span class="text-[var(--text-muted)]">DMG</span><br><span class="font-mono">36</span></div>
+                        <div><span class="text-[var(--text-muted)]">RPM</span><br><span class="font-mono">600</span></div>
+                        <div><span class="text-[var(--text-muted)]">MAG</span><br><span class="font-mono">30</span></div>
+                    </div>
+                </div>
+
+                <div class="weapon-card weapon-rarity-uncommon animate-fade-in-up delay-2">
+                    <div class="flex items-start justify-between mb-2">
+                        <h4 class="font-bold">M416</h4>
+                        <span class="px-2 py-0.5 text-xs bg-[var(--bg)] border border-[var(--border)] rounded font-mono">AR</span>
+                    </div>
+                    <div class="text-xs text-[var(--text-muted)] mb-3">Uncommon</div>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div><span class="text-[var(--text-muted)]">DMG</span><br><span class="font-mono">35</span></div>
+                        <div><span class="text-[var(--text-muted)]">RPM</span><br><span class="font-mono">750</span></div>
+                        <div><span class="text-[var(--text-muted)]">MAG</span><br><span class="font-mono">30</span></div>
+                    </div>
+                </div>
+
+                <div class="weapon-card weapon-rarity-rare animate-fade-in-up delay-3">
+                    <div class="flex items-start justify-between mb-2">
+                        <h4 class="font-bold">SCAR-H</h4>
+                        <span class="px-2 py-0.5 text-xs bg-[var(--bg)] border border-[var(--border)] rounded font-mono">AR</span>
+                    </div>
+                    <div class="text-xs text-[var(--text-muted)] mb-3">Rare</div>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div><span class="text-[var(--text-muted)]">DMG</span><br><span class="font-mono">42</span></div>
+                        <div><span class="text-[var(--text-muted)]">RPM</span><br><span class="font-mono">550</span></div>
+                        <div><span class="text-[var(--text-muted)]">MAG</span><br><span class="font-mono">20</span></div>
+                    </div>
+                </div>
+
+                <div class="weapon-card weapon-rarity-legendary animate-fade-in-up delay-4">
+                    <div class="flex items-start justify-between mb-2">
+                        <h4 class="font-bold">AWM</h4>
+                        <span class="px-2 py-0.5 text-xs bg-[var(--bg)] border border-[var(--border)] rounded font-mono">SR</span>
+                    </div>
+                    <div class="text-xs text-[var(--text-muted)] mb-3">Legendary</div>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div><span class="text-[var(--text-muted)]">DMG</span><br><span class="font-mono">120</span></div>
+                        <div><span class="text-[var(--text-muted)]">RPM</span><br><span class="font-mono">35</span></div>
+                        <div><span class="text-[var(--text-muted)]">MAG</span><br><span class="font-mono">5</span></div>
+                    </div>
+                </div>
+
+                <div class="weapon-card weapon-rarity-common animate-fade-in-up delay-5">
+                    <div class="flex items-start justify-between mb-2">
+                        <h4 class="font-bold">Kar98k</h4>
+                        <span class="px-2 py-0.5 text-xs bg-[var(--bg)] border border-[var(--border)] rounded font-mono">SR</span>
+                    </div>
+                    <div class="text-xs text-[var(--text-muted)] mb-3">Rare</div>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div><span class="text-[var(--text-muted)]">DMG</span><br><span class="font-mono">95</span></div>
+                        <div><span class="text-[var(--text-muted)]">RPM</span><br><span class="font-mono">40</span></div>
+                        <div><span class="text-[var(--text-muted)]">MAG</span><br><span class="font-mono">5</span></div>
+                    </div>
+                </div>
+
+                <div class="weapon-card weapon-rarity-epic animate-fade-in-up" style="animation-delay: 0.6s;">
+                    <div class="flex items-start justify-between mb-2">
+                        <h4 class="font-bold">Vector</h4>
+                        <span class="px-2 py-0.5 text-xs bg-[var(--bg)] border border-[var(--border)] rounded font-mono">SMG</span>
+                    </div>
+                    <div class="text-xs text-[var(--text-muted)] mb-3">Epic</div>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div><span class="text-[var(--text-muted)]">DMG</span><br><span class="font-mono">30</span></div>
+                        <div><span class="text-[var(--text-muted)]">RPM</span><br><span class="font-mono">1200</span></div>
+                        <div><span class="text-[var(--text-muted)]">MAG</span><br><span class="font-mono">25</span></div>
+                    </div>
+                </div>
+
+                <div class="weapon-card weapon-rarity-common animate-fade-in-up" style="animation-delay: 0.7s;">
+                    <div class="flex items-start justify-between mb-2">
+                        <h4 class="font-bold">MP5</h4>
+                        <span class="px-2 py-0.5 text-xs bg-[var(--bg)] border border-[var(--border)] rounded font-mono">SMG</span>
+                    </div>
+                    <div class="text-xs text-[var(--text-muted)] mb-3">Common</div>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div><span class="text-[var(--text-muted)]">DMG</span><br><span class="font-mono">28</span></div>
+                        <div><span class="text-[var(--text-muted)]">RPM</span><br><span class="font-mono">800</span></div>
+                        <div><span class="text-[var(--text-muted)]">MAG</span><br><span class="font-mono">30</span></div>
+                    </div>
+                </div>
+
+                <div class="weapon-card weapon-rarity-uncommon animate-fade-in-up" style="animation-delay: 0.8s;">
+                    <div class="flex items-start justify-between mb-2">
+                        <h4 class="font-bold">S12K</h4>
+                        <span class="px-2 py-0.5 text-xs bg-[var(--bg)] border border-[var(--border)] rounded font-mono">SG</span>
+                    </div>
+                    <div class="text-xs text-[var(--text-muted)] mb-3">Uncommon</div>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div><span class="text-[var(--text-muted)]">DMG</span><br><span class="font-mono">14×8</span></div>
+                        <div><span class="text-[var(--text-muted)]">RPM</span><br><span class="font-mono">200</span></div>
+                        <div><span class="text-[var(--text-muted)]">MAG</span><br><span class="font-mono">5</span></div>
+                    </div>
+                </div>
+
+                <div class="weapon-card weapon-rarity-rare animate-fade-in-up" style="animation-delay: 0.9s;">
+                    <div class="flex items-start justify-between mb-2">
+                        <h4 class="font-bold">Mini-14</h4>
+                        <span class="px-2 py-0.5 text-xs bg-[var(--bg)] border border-[var(--border)] rounded font-mono">DMR</span>
+                    </div>
+                    <div class="text-xs text-[var(--text-muted)] mb-3">Rare</div>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div><span class="text-[var(--text-muted)]">DMG</span><br><span class="font-mono">52</span></div>
+                        <div><span class="text-[var(--text-muted)]">RPM</span><br><span class="font-mono">400</span></div>
+                        <div><span class="text-[var(--text-muted)]">MAG</span><br><span class="font-mono">20</span></div>
+                    </div>
+                </div>
+
+                <div class="weapon-card weapon-rarity-common animate-fade-in-up" style="animation-delay: 1s;">
+                    <div class="flex items-start justify-between mb-2">
+                        <h4 class="font-bold">P1911</h4>
+                        <span class="px-2 py-0.5 text-xs bg-[var(--bg)] border border-[var(--border)] rounded font-mono">Pistol</span>
+                    </div>
+                    <div class="text-xs text-[var(--text-muted)] mb-3">Common</div>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div><span class="text-[var(--text-muted)]">DMG</span><br><span class="font-mono">45</span></div>
+                        <div><span class="text-[var(--text-muted)]">RPM</span><br><span class="font-mono">300</span></div>
+                        <div><span class="text-[var(--text-muted)]">MAG</span><br><span class="font-mono">7</span></div>
+                    </div>
+                </div>
+
+                <div class="weapon-card weapon-rarity-uncommon animate-fade-in-up" style="animation-delay: 1.1s;">
+                    <div class="flex items-start justify-between mb-2">
+                        <h4 class="font-bold">Pan</h4>
+                        <span class="px-2 py-0.5 text-xs bg-[var(--bg)] border border-[var(--border)] rounded font-mono">Melee</span>
+                    </div>
+                    <div class="text-xs text-[var(--text-muted)] mb-3">Uncommon</div>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div><span class="text-[var(--text-muted)]">DMG</span><br><span class="font-mono">60</span></div>
+                        <div><span class="text-[var(--text-muted)]">RPM</span><br><span class="font-mono">60</span></div>
+                        <div><span class="text-[var(--text-muted)]">MAG</span><br><span class="font-mono">1</span></div>
+                    </div>
+                </div>
+
+                <div class="weapon-card weapon-rarity-rare animate-fade-in-up" style="animation-delay: 1.2s;">
+                    <div class="flex items-start justify-between mb-2">
+                        <h4 class="font-bold">Molotov</h4>
+                        <span class="px-2 py-0.5 text-xs bg-[var(--bg)] border border-[var(--border)] rounded font-mono">Throw</span>
+                    </div>
+                    <div class="text-xs text-[var(--text-muted)] mb-3">Rare</div>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div><span class="text-[var(--text-muted)]">DMG</span><br><span class="font-mono">30/s</span></div>
+                        <div><span class="text-[var(--text-muted)]">RPM</span><br><span class="font-mono">—</span></div>
+                        <div><span class="text-[var(--text-muted)]">MAG</span><br><span class="font-mono">1</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Attachments -->
+            <div class="mt-16 animate-fade-in-up delay-1">
+                <h3 class="text-2xl font-bold mb-6">Attachment System</h3>
+                <div class="grid md:grid-cols-4 gap-4">
+                    <div class="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
+                        <h4 class="font-bold text-[var(--secondary)] mb-3">Optics</h4>
+                        <div class="flex flex-wrap gap-1 text-sm">
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">Red Dot</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">Holo</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">2×</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">3×</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">4×</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">6×</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">8×</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">15×</span>
+                        </div>
+                    </div>
+                    <div class="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
+                        <h4 class="font-bold text-[var(--danger)] mb-3">Muzzles</h4>
+                        <div class="flex flex-wrap gap-1 text-sm">
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">Compensator</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">Suppressor</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">Flash Hider</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">Choke</span>
+                        </div>
+                    </div>
+                    <div class="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
+                        <h4 class="font-bold text-[var(--primary)] mb-3">Other</h4>
+                        <div class="flex flex-wrap gap-1 text-sm">
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">Foregrips</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">Barrels</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">Magazines</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">Stocks</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">Lasers</span>
+                        </div>
+                    </div>
+                    <div class="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
+                        <h4 class="font-bold text-[var(--success)] mb-3">Armor & Gear</h4>
+                        <div class="flex flex-wrap gap-1 text-sm">
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">Vest L1/L2/L3</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">Helmet L1/L2/L3</span>
+                            <span class="px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded">Backpack L1/L2/L3</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Setup -->
+    <section id="setup" class="py-24 px-6">
+        <div class="max-w-7xl mx-auto">
+            <header class="text-center mb-16 animate-fade-in-up">
+                <span class="font-mono text-[var(--primary)] text-sm">DEPLOYMENT</span>
+                <h2 class="text-4xl md:text-5xl font-bold mt-2">Quick Start</h2>
+                <p class="text-[var(--text-muted)] mt-4 max-w-2xl mx-auto">Get running in Roblox Studio in 5 steps</p>
+            </header>
+
+            <div class="grid md:grid-cols-2 gap-8">
+                <!-- Steps -->
+                <div class="space-y-6 animate-fade-in-up delay-1">
+                    <div class="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 relative overflow-hidden">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-[var(--primary)] to-[var(--secondary)]"></div>
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--accent)] flex items-center justify-center font-bold text-xl text-black flex-shrink-0">1</div>
+                            <div>
+                                <h3 class="text-xl font-bold mb-2">Install Dependencies</h3>
+                                <p class="text-[var(--text-muted)] mb-4">Run wally to fetch ProfileService, Promise, Signal, Trove, TableUtil</p>
+                                <div class="code-block"><code><span class="code-comment"># Terminal</span>
+<span class="code-keyword">cd</span> /opt/data/BattleRoyale
+<span class="code-function">wally</span> <span class="code-keyword">install</span></code></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 relative overflow-hidden">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-[var(--secondary)] to-[var(--danger)]"></div>
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--secondary)] to-[var(--danger)] flex items-center justify-center font-bold text-xl text-black flex-shrink-0">2</div>
+                            <div>
+                                <h3 class="text-xl font-bold mb-2">Configure Place IDs</h3>
+                                <p class="text-[var(--text-muted)] mb-4">Update Shared/Constants.luau with your Roblox place IDs</p>
+                                <div class="code-block"><code><span class="code-comment">-- Shared/Constants.luau</span>
+<span class="code-type">Constants</span>.<span class="code-function">LOBBY_PLACE_ID</span> = <span class="code-string">123456789</span>
+<span class="code-type">Constants</span>.<span class="code-function">MATCH_PLACE_ID</span> = <span class="code-string">987654321</span></code></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 relative overflow-hidden">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-[var(--danger)] to-[var(--accent)]"></div>
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--danger)] to-[var(--accent)] flex items-center justify-center font-bold text-xl text-black flex-shrink-0">3</div>
+                            <div>
+                                <h3 class="text-xl font-bold mb-2">Run Bootstrap in Studio</h3>
+                                <p class="text-[var(--text-muted)] mb-4">Creates folder structure, Remotes, Lighting, CollisionGroups, Asset folders</p>
+                                <div class="code-block"><code><span class="code-comment">-- Studio Command Bar</span>
+<span class="code-function">loadfile</span>(<span class="code-string">"/opt/data/BattleRoyale/Bootstrap.luau"</span>)()</code></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 relative overflow-hidden">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-[var(--accent)] to-[var(--success)]"></div>
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--success)] flex items-center justify-center font-bold text-xl text-black flex-shrink-0">4</div>
+                            <div>
+                                <h3 class="text-xl font-bold mb-2">Start Rojo Servers</h3>
+                                <p class="text-[var(--text-muted)] mb-4">Two terminals - one for Lobby, one for Match</p>
+                                <div class="code-block"><code><span class="code-comment"># Terminal 1 - Lobby</span>
+<span class="code-function">rojo</span> <span class="code-keyword">serve</span> LobbyPlace/default.project.json
+
+<span class="code-comment"># Terminal 2 - Match</span>
+<span class="code-function">rojo</span> <span class="code-keyword">serve</span> MatchPlace/default.project.json</code></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 relative overflow-hidden">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-[var(--success)] to-[var(--primary)]"></div>
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--success)] to-[var(--primary)] flex items-center justify-center font-bold text-xl text-black flex-shrink-0">5</div>
+                            <div>
+                                <h3 class="text-xl font-bold mb-2">Connect VS Code & Sync</h3>
+                                <p class="text-[var(--text-muted)] mb-4">Open project in VS Code, install Rojo extension, click Connect for both ports</p>
+                                <div class="code-block"><code><span class="code-comment"># VS Code</span>
+1. Open /opt/data/BattleRoyale
+2. Install <span class="code-string">"Rojo"</span> extension
+3. Click <span class="code-function">Connect</span> (ports 34872, 34873)
+4. Sync → Studio</code></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Requirements -->
+                <div class="animate-fade-in-up delay-2">
+                    <div class="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 mb-6">
+                        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                            <svg class="w-6 h-6 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            Prerequisites
+                        </h3>
+                        <ul class="space-y-3 text-[var(--text-muted)]">
+                            <li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-[var(--success)]"></span> Roblox Studio (Windows/macOS)</li>
+                            <li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-[var(--success)]"></span> VS Code with Rojo extension</li>
+                            <li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-[var(--success)]"></span> Wally (Luau package manager)</li>
+                            <li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-[var(--success)]"></span> Node.js (for Rojo CLI)</li>
+                            <li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-[var(--primary)]"></span> 2 Roblox Places (Lobby + Match)</li>
+                        </ul>
+                    </div>
+
+                    <div class="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 mb-6">
+                        <h3 class="text-xl font-bold mb-4 flex items-center gap-2 text-[var(--secondary)]">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            Assets Required (Not Included)
+                        </h3>
+                        <div class="grid md:grid-cols-2 gap-4 text-sm text-[var(--text-muted)]">
+                            <div class="bg-[var(--bg)] p-4 rounded-xl">
+                                <h4 class="font-bold text-[var(--text)] mb-2">Models (.rbxm)</h4>
+                                <ul class="space-y-1">
+                                    <li>• Weapon viewmodels (12)</li>
+                                    <li>• Vehicle chassis + wheels</li>
+                                    <li>• Character animations</li>
+                                    <li>• Map terrain/buildings</li>
+                                </ul>
+                            </div>
+                            <div class="bg-[var(--bg)] p-4 rounded-xl">
+                                <h4 class="font-bold text-[var(--text)] mb-2">Textures</h4>
+                                <ul class="space-y-1">
+                                    <li>• PBR maps (Color/Normal/Rough/Metal)</li>
+                                    <li>• 1024×1024 max per Roblox limit</li>
+                                    <li>• UI icons (weapons, attachments)</li>
+                                    <li>• Gas wall shader textures</li>
+                                </ul>
+                            </div>
+                            <div class="bg-[var(--bg)] p-4 rounded-xl">
+                                <h4 class="font-bold text-[var(--text)] mb-2">Audio</h4>
+                                <ul class="space-y-1">
+                                    <li>• Weapon fire/reload sounds</li>
+                                    <li>• Footstep per material</li>
+                                    <li>• Vehicle engine loops</li>
+                                    <li>• UI/Ambient SFX</li>
+                                </ul>
+                            </div>
+                            <div class="bg-[var(--bg)] p-4 rounded-xl">
+                                <h4 class="font-bold text-[var(--text)] mb-2">Animations</h4>
+                                <ul class="space-y-1">
+                                    <li>• Idle/Walk/Run/Sprint</li>
+                                    <li>• Crouch/Prone/Vault/Slide</li>
+                                    <li>• ADS/Reload per weapon</li>
+                                    <li>• Vehicle enter/exit/drive</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-[var(--surface)] border border-[var(--danger)] rounded-2xl p-6">
+                        <h3 class="text-xl font-bold mb-4 flex items-center gap-2 text-[var(--danger)]">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            Mobile-Only Constraint
+                        </h3>
+                        <p class="text-[var(--text-muted)] mb-4"><strong>Roblox Studio does not run on mobile.</strong> You need a PC (local or cloud) to open Studio, connect Rojo, and playtest.</p>
+                        <div class="grid md:grid-cols-3 gap-4 text-sm">
+                            <div class="bg-[var(--bg)] p-4 rounded-xl text-center">
+                                <div class="font-bold text-[var(--primary)] mb-1">GitHub Codespaces</div>
+                                <div class="text-[var(--text-muted)]">Free 60h/mo. Edit code in browser. Still needs PC for Studio.</div>
+                            </div>
+                            <div class="bg-[var(--bg)] p-4 rounded-xl text-center">
+                                <div class="font-bold text-[var(--secondary)] mb-1">Remote Desktop</div>
+                                <div class="text-[var(--text-muted)]">Parsec/Moonlight/Chrome Remote to home PC. Best for playtesting.</div>
+                            </div>
+                            <div class="bg-[var(--bg)] p-4 rounded-xl text-center">
+                                <div class="font-bold text-[var(--accent)] mb-1">Cloud VM</div>
+                                <div class="text-[var(--text-muted)]">Paperspace/RunPod GPU instance + Parsec. $0.50-2/hr.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-12 px-6 border-t border-[var(--border)]">
+        <div class="max-w-7xl mx-auto text-center">
+            <div class="flex items-center justify-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--accent)] flex items-center justify-center">
+                    <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </div>
+                <span class="font-mono text-xl font-bold bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] bg-clip-text text-transparent">BATTLE_ROYALE</span>
+            </div>
+            <p class="text-[var(--text-muted)] mb-4">Production-grade foundation — ready for asset integration and playtesting</p>
+            <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-[var(--text-muted)]">
+                <span>Rojo + Wally + Luau</span>
+                <span>•</span>
+                <span>Server-authoritative</span>
+                <span>•</span>
+                <span>Anti-cheat validated</span>
+                <span>•</span>
+                <span>PBR visual pipeline</span>
+                <span>•</span>
+                <span>62 files / 562 KB</span>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Smooth scroll
+        function scrollToSection(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
+        // Intersection Observer for animations
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                }
+            });
+        }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+        document.querySelectorAll('.animate-fade-in-up, .animate-slide-in').forEach(el => {
+            observer.observe(el);
+        });
+
+        // Navbar scroll effect
+        let lastScroll = 0;
+        const nav = document.querySelector('nav');
+        window.addEventListener('scroll', () => {
+            const currentScroll = window.pageYOffset;
+            if (currentScroll > 100) {
+                nav.style.boxShadow = '0 4px 30px rgba(0,0,0,0.3)';
+            } else {
+                nav.style.boxShadow = 'none';
+            }
+            lastScroll = currentScroll;
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key >= '1' && e.key <= '6') {
+                const sections = ['overview', 'architecture', 'systems', 'files', 'weapons', 'setup'];
+                const idx = parseInt(e.key) - 1;
+                if (sections[idx]) scrollToSection(sections[idx]);
+            }
+        });
+
+        // Add click handlers to nav links
+        document.querySelectorAll('nav a[href^="#"]').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                scrollToSection(link.getAttribute('href').slice(1));
+            });
+        });
+    </script>
+</body>
+</html>

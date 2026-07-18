@@ -1,0 +1,16 @@
+[package]
+name = "battle-royale"
+version = "0.1.0"
+description = "Battle Royale game for Roblox"
+license = "MIT"
+repository = "https://github.com/yourusername/battle-royale"
+
+[dependencies]
+ProfileService = "littensy/profile-service@2.0.0"
+Promise = "evaera/promise@4.1.0"
+Signal = "evaera/signal@1.1.0"
+Trove = "evaera/trove@1.1.0"
+TableUtil = "evaera/table-util@1.1.0"
+
+[dev-dependencies]
+Luau-Lint = "jason-inc/luau-lint@1.0.0"
