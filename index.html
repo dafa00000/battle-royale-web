@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Battle Royale Web Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #0a0a0f; color: #f0f0f0; overflow: hidden; }
+    #app { width: 100vw; height: 100vh; }
+    #loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; background: #0a0a0f; z-index: 100; }
+    .spinner { width: 48px; height: 48px; border: 3px solid #2a2a3a; border-top-color: #00b4ff; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #ui { position: fixed; inset: 0; pointer-events: none; z-index: 50; }
+    .hud { position: absolute; bottom: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; pointer-events: none; }
+    .hud-panel { background: rgba(20,20,20,0.85); border: 1px solid #3c3c3c; border-radius: 12px; padding: 1rem 1.5rem; backdrop-filter: blur(8px); pointer-events: auto; }
+    .stat { display: flex; align-items: center; gap: 0.5rem; font-family: 'JetBrains Mono', monospace; }
+    .stat-label { color: #a0a0a0; font-size: 0.75rem; text-transform: uppercase; }
+    .stat-value { color: #fff; font-size: 1.25rem; font-weight: 700; }
+    .minimap { position: absolute; bottom: 20px; right: 20px; width: 200px; height: 200px; background: rgba(20,20,20,0.9); border: 2px solid #3c3c3c; border-radius: 12px; overflow: hidden; pointer-events: auto; }
+    .minimap-canvas { width: 100%; height: 100%; display: block; }
+    #crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 24px; height: 24px; pointer-events: none; z-index: 60; }
+    #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #00b4ff; opacity: 0.8; }
+    #crosshair::before { width: 2px; height: 12px; left: 50%; top: 50%; transform: translate(-50%, -50%) translateY(-16px); }
+    #crosshair::after { height: 2px; width: 12px; left: 50%; top: 50%; transform: translate(-50%, -50%) translateX(-16px); }
+    .weapon-hud { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(20,20,20,0.85); border: 1px solid #3c3c3c; border-radius: 12px; padding: 0.75rem 1.5rem; display: flex; align-items: center; gap: 1rem; pointer-events: auto; }
+    .ammo { font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; font-weight: 700; }
+    .ammo-current { color: #00b4ff; }
+    .ammo-total { color: #a0a0a0; }
+    .fire-mode { text-transform: uppercase; font-size: 0.7rem; color: #ff8c00; letter-spacing: 0.05em; }
+    .zone-warning { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; opacity: 0; transition: opacity 0.3s; z-index: 70; }
+    .zone-warning.visible { opacity: 1; }
+    .zone-warning-text { font-size: 2rem; font-weight: 700; color: #dc3232; text-shadow: 0 0 20px #dc3232; animation: pulse 1s ease-in-out infinite; }
+    .zone-warning-sub { color: #fff; margin-top: 0.5rem; font-size: 1rem; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .kill-feed { position: fixed; top: 20px; right: 20px; width: 300px; display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none; z-index: 50; }
+    .kill-entry { background: rgba(20,20,20,0.9); border: 1px solid #3c3c3c; border-radius: 8px; padding: 0.5rem 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; animation: slideIn 0.3s ease-out; opacity: 0; }
+    .kill-entry.visible { opacity: 1; }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .killer { color: #00b4ff; }
+    .victim { color: #dc3232; }
+    .weapon { color: #ff8c00; }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="loading">
+    <div class="spinner"></div>
+    <div style="color: #a0a0a0; font-size: 0.9rem;">Loading Battle Royale Demo...</div>
+  </div>
+  <div id="app"></div>
+  <div id="ui">
+    <div class="hud">
+      <div class="hud-panel">
+        <div class="stat"><span class="stat-label">Health</span><span class="stat-value" id="hp">100</span></div>
+        <div class="stat"><span class="stat-label">Armor</span><span class="stat-value" id="armor">0</span></div>
+      </div>
+      <div class="hud-panel">
+        <div class="stat"><span class="stat-label">Zone</span><span class="stat-value" id="zone-phase">1</span></div>
+        <div class="stat"><span class="stat-label">Alive</span><span class="stat-value" id="alive">100</span></div>
+      </div>
+    </div>
+    <canvas class="minimap-canvas" id="minimap"></canvas>
+    <div id="crosshair"></div>
+    <div class="weapon-hud">
+      <div>
+        <div class="ammo"><span class="ammo-current" id="ammo-current">30</span><span class="ammo-total"> / <span id="ammo-total">30</span></span></div>
+        <div class="fire-mode" id="fire-mode">auto</div>
+      </div>
+      <div style="color: #a0a0a0; font-size: 0.85rem;" id="weapon-name">AK-74</div>
+    </div>
+    <div class="zone-warning" id="zone-warning">
+      <div class="zone-warning-text">ZONE SHRINKING</div>
+      <div class="zone-warning-sub" id="zone-warning-sub">Next phase in 30s</div>
+    </div>
+    <div class="kill-feed" id="kill-feed"></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
