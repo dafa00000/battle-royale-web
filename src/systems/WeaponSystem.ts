@@ -1,5 +1,5 @@
 // ============================================
-// WEAPON SYSTEM - Simplified for build
+// WEAPON SYSTEM - Fixed opacity issue
 // ============================================
 
 import * as THREE from 'three';
@@ -54,6 +54,19 @@ const WEAPONS: Record<string, WeaponTemplate> = {
     Attachments: {}, Animations: {}, Sounds: {}, Rarity: 'Legendary', Price: { Cash: 5000, Credits: 500 },
   },
 };
+
+interface WeaponInstance {
+  template: WeaponTemplate;
+  currentAmmo: number;
+  reserveAmmo: number;
+  fireMode: 'auto' | 'semi';
+  lastFireTime: number;
+  recoil: { pitch: number; yaw: number };
+  spread: number;
+  isReloading: boolean;
+  reloadEndTime: number;
+  shotIndex: number;
+}
 
 export class WeaponSystem {
   private state: GameState;
@@ -208,7 +221,8 @@ export class WeaponSystem {
 
   private playMuzzleFlash(): void {
     if (!this.muzzleFlash) return;
-    this.muzzleFlash.material.opacity = 1;
+    const mat = this.muzzleFlash.material as THREE.MeshBasicMaterial;
+    mat.opacity = 1;
     this.muzzleFlash.scale.setScalar(0.8 + Math.random() * 0.4);
     this.muzzleFlash.rotation.z = Math.random() * Math.PI * 2;
   }
@@ -232,13 +246,17 @@ export class WeaponSystem {
     const intersects = this.rayCaster.intersectObjects(this.scene.children, true);
 
     const trailGeo = new THREE.BufferGeometry();
-    const trailPos = new Float32Array([origin.x, origin.y, origin.z, 0, 0, 0]);
-    trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+    const trailPos = new Float32Array([0, 0, 0, 0, 0, 0]);
+    const trailGeo = new THREE.BufferGeometry();
+    trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0, 0, 0, 0]), 3));
     const trailMat = new THREE.LineBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.8 });
     const trail = new THREE.Line(trailGeo, trailMat);
     trail.userData = { age: 0 };
     this.scene.add(trail);
     this.bulletTrails.push(trail);
+
+    this.rayCaster.set(origin, direction);
+    const intersects = this.rayCaster.intersectObjects(this.scene.children, true);
 
     if (intersects.length > 0) {
       const hit = intersects[0];

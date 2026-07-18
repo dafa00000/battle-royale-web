@@ -226,6 +226,7 @@ export class ZoneSystem {
       const overflow = dist - this.state.zone.radius;
       this.state.gasIntensity = Math.min(1, overflow / 500);
 
+      // Apply damage over time
       if (!p.isInGasDamageCooldown) {
         p.health -= this.state.zone.damagePerTick * delta;
         p.health = Math.max(0, p.health);
@@ -236,8 +237,10 @@ export class ZoneSystem {
       this.state.gasIntensity = 0;
     }
 
+    // Update visual post-process for gas
     this.updateGasEffect();
 
+    // Notify UI of gas state change
     if (wasInGas !== this.state.isInGas) {
       // UI will read state.isInGas
     }
@@ -268,6 +271,12 @@ export class ZoneSystem {
       const nextR = CONSTANTS.ZONE_PHASES[this.phaseIndex + 1].radius;
       this.nextZoneRing.scale.setScalar(nextR / 2000);
       this.nextZoneRing.position.set(this.state.zone.center[0], 0.1, this.state.zone.center[2]);
+    }
+  }
+
+  private animateZoneVisuals(delta: number): void {
+    if (this.zoneRing) {
+      this.zoneRing.material.opacity = 0.1 + Math.sin(performance.now() / 1000) * 0.05;
     }
   }
 
