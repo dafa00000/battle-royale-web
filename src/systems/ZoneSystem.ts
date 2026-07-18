@@ -155,7 +155,6 @@ export class ZoneSystem {
     const phase = CONSTANTS.ZONE_PHASES[this.phaseIndex];
     const oldRadius = this.state.zone.radius;
 
-    // Move center slightly
     const angle = Math.random() * Math.PI * 2;
     const offset = oldRadius * 0.3;
     const newCenter: Vector3 = [
@@ -164,7 +163,6 @@ export class ZoneSystem {
       this.state.zone.center[2] + Math.sin(angle) * offset,
     ];
 
-    // Animate transition
     this.animateZoneTransition(oldRadius, phase.radius, this.state.zone.center, newCenter, phase.duration);
 
     this.state.zone.radius = phase.radius;
@@ -192,7 +190,7 @@ export class ZoneSystem {
     const startTime = performance.now() / 1000;
     const animate = () => {
       const elapsed = performance.now() / 1000 - startTime;
-      const t = Math.min(elapsed / 10, 1); // 10s transition
+      const t = Math.min(elapsed / 10, 1);
       const eased = 1 - Math.pow(1 - t, 3);
 
       const radius = THREE.MathUtils.lerp(oldRadius, newRadius, eased);
@@ -226,7 +224,6 @@ export class ZoneSystem {
       const overflow = dist - this.state.zone.radius;
       this.state.gasIntensity = Math.min(1, overflow / 500);
 
-      // Apply damage over time
       if (!p.isInGasDamageCooldown) {
         p.health -= this.state.zone.damagePerTick * delta;
         p.health = Math.max(0, p.health);
@@ -237,13 +234,7 @@ export class ZoneSystem {
       this.state.gasIntensity = 0;
     }
 
-    // Update visual post-process for gas
     this.updateGasEffect();
-
-    // Notify UI of gas state change
-    if (wasInGas !== this.state.isInGas) {
-      // UI will read state.isInGas
-    }
   }
 
   private updateGasEffect(): void {
@@ -255,7 +246,7 @@ export class ZoneSystem {
   }
 
   private animateZoneVisuals(delta: number): void {
-    if (this.zoneRing) {
+    if (this.zoneRing && this.zoneRing.material instanceof THREE.MeshBasicMaterial) {
       this.zoneRing.material.opacity = 0.1 + Math.sin(performance.now() / 1000) * 0.05;
     }
   }
@@ -271,12 +262,6 @@ export class ZoneSystem {
       const nextR = CONSTANTS.ZONE_PHASES[this.phaseIndex + 1].radius;
       this.nextZoneRing.scale.setScalar(nextR / 2000);
       this.nextZoneRing.position.set(this.state.zone.center[0], 0.1, this.state.zone.center[2]);
-    }
-  }
-
-  private animateZoneVisuals(delta: number): void {
-    if (this.zoneRing) {
-      this.zoneRing.material.opacity = 0.1 + Math.sin(performance.now() / 1000) * 0.05;
     }
   }
 
