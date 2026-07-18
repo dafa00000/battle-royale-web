@@ -89,6 +89,7 @@
     }
     .health-bar-fill.low { background: linear-gradient(90deg, #ffcc00, #ff8800); }
     .health-bar-fill.critical { background: linear-gradient(90deg, #ff3300, #cc0000); animation: pulseRed 0.8s infinite; }
+    .health-bar-fill.gas-poisoned { background: linear-gradient(90deg, #8a3a2e, #6e2a1e); filter: grayscale(0.4) saturate(0.6); }
     @keyframes pulseRed { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
 
     /* === Crosshair === */
@@ -340,11 +341,14 @@
 
     <!-- Debug buttons -->
     <div class="debug-controls">
-      <button class="debug-btn" onclick="simReload()">Reload [R]</button>
-      <button class="debug-btn" onclick="simDamage()">Damage [H]</button>
-      <button class="debug-btn" onclick="simHeal()">Heal</button>
-      <button class="debug-btn" onclick="simPickup()">Pickup [E]</button>
-      <button class="debug-btn" onclick="simKill()">Kill Feed</button>
+      <button class="debug-btn" onclick="simReload()">[R] Reload</button>
+      <button class="debug-btn" onclick="simFire()">Fire</button>
+      <button class="debug-btn" onclick="simDamage()">[G] Damage</button>
+      <button class="debug-btn" onclick="simMedkit()">[H] Medkit</button>
+      <button class="debug-btn" onclick="simPickup()">[E] Pickup</button>
+      <button class="debug-btn" onclick="simKill()">[K] KillFeed</button>
+      <button class="debug-btn" onclick="simToggleFireMode()">[B] Fire Mode</button>
+      <button class="debug-btn" onclick="simToggleGas()">Toggle Gas</button>
     </div>
 
     <!-- Crosshair -->
@@ -363,6 +367,9 @@
 
     <!-- Reload text -->
     <div class="reload-text" id="reload-text">RELOADING...</div>
+
+    <!-- Empty alert -->
+    <div class="reload-text" id="empty-alert" style="color:#dc3232;background:rgba(20,0,0,0.6);padding:6px 14px;border-radius:4px;border:1px solid rgba(220,50,50,0.5);">AMMO EMPTY - PRESS R TO RELOAD</div>
 
     <!-- Zone warning -->
     <div class="zone-warning" id="zone-warning">
@@ -386,6 +393,15 @@
             <span class="stat-value" id="hp">100</span>
           </div>
           <div class="health-bar"><div class="health-bar-fill" id="hp-bar-fill"></div></div>
+        </div>
+      </div>
+      <div class="hud-panel">
+        <div class="health-bar-wrap">
+          <div class="stat">
+            <span class="stat-label">Armor</span>
+            <span class="stat-value" id="armor">0</span>
+          </div>
+          <div class="health-bar"><div class="health-bar-fill" id="armor-bar-fill" style="background:linear-gradient(90deg,#5c5cff,#3c3ccc);width:50%"></div></div>
         </div>
       </div>
       <div class="hud-panel">

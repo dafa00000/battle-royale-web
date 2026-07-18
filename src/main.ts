@@ -1,5 +1,5 @@
 // ============================================
-// BATTLE ROYALE - HUD PROTOTYPE (UI only, no 3D)
+// BATTLE ROYALE - HUD PROTOTYPE v2 (Full Simulation)
 // ============================================
 
 interface GameState {
@@ -9,15 +9,17 @@ interface GameState {
   weaponName: string; fireMode: 'AUTO' | 'SEMI';
   zonePhase: number; alive: number;
   isReloading: boolean;
+  isInGas: boolean;
 }
 
 const state: GameState = {
   health: 100, maxHealth: 100,
-  armor: 0, maxArmor: 100,
+  armor: 50, maxArmor: 100,
   ammo: 30, ammoReserve: 90, maxAmmo: 30,
   weaponName: 'AK-74', fireMode: 'AUTO',
   zonePhase: 1, alive: 100,
   isReloading: false,
+  isInGas: false,
 };
 
 // ============================================
@@ -26,6 +28,7 @@ const state: GameState = {
 function updateHUD(): void {
   const hpEl = document.getElementById('hp');
   const hpBar = document.getElementById('hp-bar-fill');
+  const armorEl = document.getElementById('armor');
   const ammoCur = document.getElementById('ammo-current');
   const ammoTot = document.getElementById('ammo-total');
   const fireModeEl = document.getElementById('fire-mode');
@@ -33,23 +36,36 @@ function updateHUD(): void {
   const zoneEl = document.getElementById('zone-phase');
   const aliveEl = document.getElementById('alive');
   const lowHealth = document.getElementById('low-health');
+  const emptyAlert = document.getElementById('empty-alert');
 
   if (hpEl) hpEl.textContent = String(Math.round(state.health));
+  if (armorEl) armorEl.textContent = String(Math.round(state.armor));
+  const armorBar = document.getElementById('armor-bar-fill');
+  if (armorBar) armorBar.style.width = `${(state.armor / state.maxArmor) * 100}%`;
+
   if (hpBar) {
     const pct = (state.health / state.maxHealth) * 100;
     hpBar.style.width = `${pct}%`;
     hpBar.className = 'health-bar-fill';
-    if (pct < 25) hpBar.classList.add('critical');
-    else if (pct < 50) hpBar.classList.add('low');
+    if (state.isInGas) {
+      hpBar.classList.add('gas-poisoned'); // desaturated red
+    } else if (pct < 25) {
+      hpBar.classList.add('critical');
+    } else if (pct < 50) {
+      hpBar.classList.add('low');
+    }
   }
   if (lowHealth) lowHealth.classList.toggle('active', state.health < 25);
 
-  if (ammoCur) ammoCur.textContent = String(state.ammo);
+  if (ammoCur) ammoCur.textContent = state.ammo === 0 ? '✕' : String(state.ammo);
+  if (ammoCur) ammoCur.style.color = state.ammo === 0 ? '#dc3232' : '#00b4ff';
   if (ammoTot) ammoTot.textContent = String(state.ammoReserve);
   if (fireModeEl) fireModeEl.textContent = state.fireMode;
   if (weaponEl) weaponEl.textContent = state.weaponName;
   if (zoneEl) zoneEl.textContent = String(state.zonePhase);
   if (aliveEl) aliveEl.textContent = String(state.alive);
+
+  if (emptyAlert) emptyAlert.classList.toggle('visible', state.ammo === 0 && !state.isReloading);
 }
 
 // ============================================
@@ -71,7 +87,6 @@ function renderSquad(): void {
   squad.forEach(member => {
     const div = document.createElement('div');
     div.className = 'squad-member';
-
     const initial = member.name[0].toUpperCase();
     const hpClass = member.hp > 60 ? '' : member.hp > 30 ? 'med' : 'low';
 
@@ -92,9 +107,18 @@ function renderSquad(): void {
 // ============================================
 // KILL FEED
 // ============================================
-function addKillFeed(killer: string, victim: string, weapon: string): void {
+const killers = ['Ghost_42', 'Recon_07', 'Viper', 'Sniper_K', 'Rusher66', 'Phantom_X', 'Merc99', 'Frost_Blk'];
+const victims = ['Runner99', 'Camper_1', 'NoobMaster', 'Loot_Goblin', 'AFK_Andy', 'GoldWolf', 'TaskFake', 'Zero_Q'];
+const weapons = ['AK-74', 'AWM', 'M416', 'Groza', 'Pan', ' Desert Eagle', 'UMP45'];
+
+function addKillFeed(killer?: string, victim?: string, weapon?: string): void {
   const feed = document.getElementById('kill-feed');
   if (!feed) return;
+
+  if (!killer) killer = killers[Math.floor(Math.random() * killers.length)];
+  if (!victim) victim = victims[Math.floor(Math.random() * victims.length)];
+  if (!weapon) weapon = weapons[Math.floor(Math.random() * weapons.length)];
+
   const entry = document.createElement('div');
   entry.className = 'kill-entry';
   entry.innerHTML = `<span class="killer">${killer}</span> ▸ <span class="weapon">${weapon}</span> ▸ <span class="victim">${victim}</span>`;
@@ -167,18 +191,15 @@ function drawRadar(): void {
   const cy = h / 2;
   const radius = w / 2 - 10;
 
-  // Clear
   ctx.fillStyle = 'rgba(15,15,20,0.6)';
   ctx.fillRect(0, 0, w, h);
 
-  // Outer ring
   ctx.strokeStyle = 'rgba(0,180,255,0.3)';
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Crosshair lines
   ctx.strokeStyle = 'rgba(0,180,255,0.15)';
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -186,7 +207,6 @@ function drawRadar(): void {
   ctx.moveTo(cx - radius, cy); ctx.lineTo(cx + radius, cy);
   ctx.stroke();
 
-  // Zone (shrinking circle)
   const zoneR = radius * (0.6 + Math.sin(Date.now() / 3000) * 0.1);
   ctx.strokeStyle = 'rgba(0,180,255,0.8)';
   ctx.lineWidth = 2;
@@ -196,7 +216,6 @@ function drawRadar(): void {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Next zone (orange)
   const nextR = radius * 0.4;
   ctx.strokeStyle = 'rgba(255,140,0,0.6)';
   ctx.lineWidth = 1.5;
@@ -206,13 +225,11 @@ function drawRadar(): void {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Player dot
   ctx.fillStyle = '#00b4ff';
   ctx.beginPath();
   ctx.arc(cx, cy, 4, 0, Math.PI * 2);
   ctx.fill();
 
-  // Player direction
   ctx.strokeStyle = '#00b4ff';
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -220,19 +237,17 @@ function drawRadar(): void {
   ctx.lineTo(cx, cy - 12);
   ctx.stroke();
 
-  // Enemy dots
   const enemyPositions = [
     { x: 0.2, y: -0.3 }, { x: -0.4, y: 0.2 }, { x: 0.3, y: 0.4 },
   ];
   enemyPositions.forEach(p => {
-    if (Math.sin(Date.now() / 2000 + p.x * 10) > 0.3) return; // intermittent
+    if (Math.sin(Date.now() / 2000 + p.x * 10) > 0.3) return;
     ctx.fillStyle = '#dc3232';
     ctx.beginPath();
     ctx.arc(cx + p.x * radius, cy + p.y * radius, 3, 0, Math.PI * 2);
     ctx.fill();
   });
 
-  // Squad dots
   squad.forEach((m, i) => {
     if (m.status !== 'ALIVE') return;
     const angle = (i / squad.length) * Math.PI * 2 + Date.now() / 10000;
@@ -256,15 +271,35 @@ function updateGasEffect(intensity: number): void {
 }
 
 // ============================================
+// SCREEN SHAKE (weapons / damage)
+// ============================================
+let shakeTimeout: number | null = null;
+function screenShake(intensity: number, duration: number): void {
+  const app = document.getElementById('app');
+  if (!app) return;
+  const start = Date.now();
+  const interval = setInterval(() => {
+    if (Date.now() - start > duration) {
+      app.style.transform = '';
+      clearInterval(interval);
+      return;
+    }
+    const dx = (Math.random() - 0.5) * intensity;
+    const dy = (Math.random() - 0.5) * intensity;
+    app.style.transform = `translate(${dx}px, ${dy}px)`;
+  }, 16);
+}
+
+// ============================================
 // SIMULATION CONTROLS
 // ============================================
 (window as any).simReload = function (): void {
   if (state.isReloading) return;
-  if (state.ammo === state.maxAmmo || state.ammoReserve <= 0) return;
+  if (state.ammo === state.maxAmmo) return;
+  if (state.ammoReserve <= 0) return;
 
   state.isReloading = true;
-  const reloadText = document.getElementById('reload-text');
-  reloadText?.classList.add('visible');
+  document.getElementById('reload-text')?.classList.add('visible');
 
   setTimeout(() => {
     const needed = state.maxAmmo - state.ammo;
@@ -272,19 +307,49 @@ function updateGasEffect(intensity: number): void {
     state.ammo += taken;
     state.ammoReserve -= taken;
     state.isReloading = false;
-    reloadText?.classList.remove('visible');
+    document.getElementById('reload-text')?.classList.remove('visible');
     updateHUD();
-  }, 2200);
+  }, 2000); // 2 seconds as requested
+};
+
+(window as any).simFire = function (): void {
+  if (state.isReloading) return;
+  if (state.ammo <= 0) {
+    // EMPTY alert + small shake
+    const emptyAlert = document.getElementById('empty-alert');
+    emptyAlert?.classList.add('visible');
+    setTimeout(() => emptyAlert?.classList.remove('visible'), 800);
+    return;
+  }
+  state.ammo--;
+  // AK-74 heavy screen shake (Resident Evil style)
+  screenShake(3, 120);
+  updateHUD();
 };
 
 (window as any).simDamage = function (): void {
+  state.armor = Math.max(0, state.armor - 20);
   state.health = Math.max(0, state.health - 15);
+  screenShake(8, 300); // heavy shake on damage
   updateHUD();
 };
 
-(window as any).simHeal = function (): void {
-  state.health = Math.min(state.maxHealth, state.health + 25);
+(window as any).simGasDamage = function (delta: number): void {
+  state.health = Math.max(0, state.health - 1.5 * delta);
+  state.isInGas = true;
   updateHUD();
+};
+
+(window as any).simMedkit = function (): void {
+  // Smoothly restore to 100
+  const hpBar = document.getElementById('hp-bar-fill');
+  if (hpBar) hpBar.style.transition = 'width 1.5s ease-out, background 1.5s';
+  state.health = 100;
+  state.armor = Math.min(state.maxArmor, state.armor + 20);
+  updateHUD();
+  setTimeout(() => {
+    if (hpBar) hpBar.style.transition = '';
+  }, 1600);
 };
 
 (window as any).simPickup = function (): void {
@@ -294,13 +359,20 @@ function updateGasEffect(intensity: number): void {
 };
 
 (window as any).simKill = function (): void {
-  const killers = ['Ghost_42', 'Recon_07', 'Viper', 'Sniper_K', 'Rusher66'];
-  const victims = ['Runner99', 'Camper_1', 'NoobMaster', 'Loot_Goblin', 'AFK_Andy'];
-  const weapons = ['AK-74', 'AWM', 'M416', 'Groza', 'Pan'];
-  const k = killers[Math.floor(Math.random() * killers.length)];
-  const v = victims[Math.floor(Math.random() * victims.length)];
-  const w = weapons[Math.floor(Math.random() * weapons.length)];
-  addKillFeed(k, v, w);
+  addKillFeed();
+};
+
+(window as any).simToggleFireMode = function (): void {
+  state.fireMode = state.fireMode === 'AUTO' ? 'SEMI' : 'AUTO';
+  updateHUD();
+};
+
+// Toggle gas state (manual testing)
+let gasToggle = false;
+(window as any).simToggleGas = function (): void {
+  gasToggle = !gasToggle;
+  state.isInGas = gasToggle;
+  updateHUD();
 };
 
 // ============================================
@@ -310,94 +382,68 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
   const key = e.key.toLowerCase();
   switch (key) {
     case 'r': (window as any).simReload(); break;
-    case 'h': (window as any).simDamage(); break;
+    case 'g': (window as any).simDamage(); break;
+    case 'h': (window as any).simMedkit(); break;
     case 'e': (window as any).simPickup(); break;
-    case 'b':
-      state.fireMode = state.fireMode === 'AUTO' ? 'SEMI' : 'AUTO';
-      updateHUD();
-      break;
-    case ' ':
-      // Random kill on space (for testing)
-      (window as any).simKill();
-      break;
+    case 'k': (window as any).simKill(); break;
+    case 'b': (window as any).simToggleFireMode(); break;
+    case ' ': e.preventDefault(); (window as any).simFire(); break;
   }
-  // Also bind to debug buttons functions globally
-});
-
-// Prevent tab navigation
-document.addEventListener('keydown', (e) => {
   if (e.key === 'Tab') e.preventDefault();
 });
 
-// ============================================
-// ALIVE COUNTER TICK DOWN
-// ============================================
-let aliveInterval = setInterval(() => {
-  if (state.alive > 1) {
-    state.alive -= Math.random() < 0.6 ? 1 : 0;
-    if (state.alive < 1) state.alive = 1;
-    updateHUD();
-  } else {
-    clearInterval(aliveInterval);
-  }
-}, 800 + Math.random() * 1500);
+document.addEventListener('mousedown', (e) => {
+  const target = e.target as HTMLElement;
+  if (target.classList.contains('debug-btn')) return;
+  if (e.button === 0) (window as any).simFire();
+});
 
 // ============================================
-// ZONE PHASE INCREMENT
+// ALIVE COUNTER TICK DOWN (15-30s random + kill feed)
 // ============================================
-let zoneInterval = setInterval(() => {
+function scheduleNextDeath(): void {
+  const interval = 15000 + Math.random() * 15000;
+  setTimeout(() => {
+    if (state.alive > 1) {
+      state.alive--;
+      updateHUD();
+      // Trigger kill feed notification
+      addKillFeed();
+    }
+    scheduleNextDeath();
+  }, interval);
+}
+
+// ============================================
+// ZONE PHASE INCREMENT (every 60s)
+// ============================================
+setInterval(() => {
   if (state.zonePhase < 8) {
     state.zonePhase++;
     updateHUD();
     showZoneWarning(state.zonePhase, `Zone ${state.zonePhase} incoming!`);
     setTimeout(() => hideZoneWarning(), 4500);
     addKillFeed('【ZONE】', `Phase ${state.zonePhase}`, 'SHRINK');
-  } else {
-    clearInterval(zoneInterval);
   }
-}, 60000); // every 60 seconds
+}, 60000);
 
 // ============================================
-// AUTO FIRE (hold mouse)
+// GAS DAMAGING (if in gas, damage over time)
 // ============================================
-let isFiring = false;
-let fireInterval: number | null = null;
-
-function startFire(): void {
-  if (isFiring) return;
-  isFiring = true;
-  const fire = () => {
-    if (state.ammo > 0 && !state.isReloading) {
-      state.ammo--;
-      updateHUD();
-    } else {
-      stopFire();
-    }
-  };
-  fire();
-  fireInterval = window.setInterval(fire, 100); // 600 RPM
-}
-
-function stopFire(): void {
-  isFiring = false;
-  if (fireInterval) { clearInterval(fireInterval); fireInterval = null; }
-}
-
-document.addEventListener('mousedown', (e) => {
-  const target = e.target as HTMLElement;
-  // Prevent firing when clicking buttons
-  if (target.classList.contains('debug-btn')) return;
-  if (e.button === 0) startFire();
-});
-document.addEventListener('mouseup', stopFire);
+let gasDamageInterval = setInterval(() => {
+  if (state.isInGas && state.health > 0) {
+    state.health = Math.max(0, state.health - 1);
+    updateHUD();
+  }
+}, 1000);
 
 // ============================================
-// MAIN LOOP
+// MAIN LOOP (radar draw)
 // ============================================
 function loop(): void {
   drawRadar();
-  // Random gas effect fluctuation for testing
-  const gasIntensity = (Math.sin(Date.now() / 4000) + 1) / 2 * 0.3;
+  // Random gas effect fluctuation
+  const gasIntensity = state.isInGas ? 0.7 + Math.sin(Date.now() / 4000) * 0.2 : (Math.sin(Date.now() / 4000) + 1) / 2 * 0.3;
   updateGasEffect(gasIntensity);
   requestAnimationFrame(loop);
 }
@@ -406,7 +452,6 @@ function loop(): void {
 // START
 // ============================================
 function start(): void {
-  // Hide loading
   const loading = document.getElementById('loading');
   if (loading) {
     loading.style.opacity = '0';
@@ -416,6 +461,7 @@ function start(): void {
   renderSquad();
   updateHUD();
   loop();
+  scheduleNextDeath(); // start alive countdown
 
   // Auto demo events
   setTimeout(() => addKillFeed('Ghost_42', 'Loot_Goblin', 'AK-74'), 3000);
@@ -424,15 +470,14 @@ function start(): void {
   setTimeout(() => hideInteraction(), 9000);
   setTimeout(() => addKillFeed('Viper_X', 'NoobMaster', 'Groza'), 12000);
 
-  console.log('🎮 Battle Royale HUD Prototype Started!');
-  console.log('● Press R or click [Reload] — reload animation');
-  console.log('● Press H or click [Damage] — lose 15 HP');
-  console.log('● Press E or click [Pickup] — show loot prompt');
-  console.log('● Press B — toggle AUTO/SEMI');
-  console.log('● Click on screen — fire weapon (decreases ammo)');
-  console.log('● Press Space — random kill feed entry');
-  console.log('● Alive counter ticks down automatically');
-  console.log('● Zone increments every 60 seconds');
+  console.log('🎮 Battle Royale HUD Prototype v2 Started!');
+  console.log('● [R] Reload         | [Click]/[Space] Fire');
+  console.log('● [G] Damage -15HP/-20 Armor | [H] Medkit heal to 100');
+  console.log('● [E] Pickup prompt  | [K] Kill feed   | [B] Toggle fire mode');
+  console.log('● Alive ticks down every 15-30s');
+  console.log('● Zone increments every 60s (1→8)');
+  console.log('● Damage when ammo=0 triggers EMPTY alert');
+  console.log('● Low HP (<25) triggers red overlay flash');
 }
 
 start();
