@@ -4,14 +4,16 @@
 
 import * as THREE from 'three';
 import { GameState, ZoneState, Vector3 } from '../types';
+import { CONSTANTS } from '../constants';
 
 export class Minimap {
-  private state: GameState;
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
+  public state: GameState;
+  public canvas: HTMLCanvasElement;
+  public ctx: CanvasRenderingContext2D;
   private size = 200;
   private zoom = 1;
   private playerMarker = { x: 0, y: 0, rotation: 0 };
+  private visible = true;
 
   constructor(state: GameState) {
     this.state = state;
@@ -21,14 +23,20 @@ export class Minimap {
     window.addEventListener('resize', () => this.resize());
   }
 
-  private resize(): void {
+  public resize(): void {
     const dpr = window.devicePixelRatio || 1;
     this.canvas.width = this.size * dpr;
     this.canvas.height = this.size * dpr;
     this.ctx.scale(dpr, dpr);
   }
 
-  update(): void {
+  public toggle(): void {
+    this.visible = !this.visible;
+    this.canvas.style.display = this.visible ? 'block' : 'none';
+  }
+
+  public update(): void {
+    if (!this.visible) return;
     this.clear();
     this.drawZone();
     this.drawPlayer();
@@ -101,7 +109,7 @@ export class Minimap {
 
     this.playerMarker.x = centerX + dx;
     this.playerMarker.y = centerY - dz; // Y inverted
-    this.playerMarker.rotation = p.rotation.y;
+    this.playerMarker.rotation = this.state.player.rotation[1];
 
     // Player arrow
     this.ctx.save();
@@ -129,7 +137,6 @@ export class Minimap {
     this.state.squad.members.forEach(member => {
       if (member.userId === this.state.player.id) return;
 
-      // Get member position from state (simplified)
       const centerX = this.size / 2;
       const centerY = this.size / 2;
       const scale = this.size / (CONSTANTS.MAP_RADIUS * 2);
@@ -156,7 +163,6 @@ export class Minimap {
 
   private drawVehicles(): void {
     // Draw nearby vehicles
-    // Simplified for demo
   }
 
   private drawLoot(): void {
@@ -174,7 +180,7 @@ export class Minimap {
     this.ctx.fillStyle = '#a0a0a0';
 
     const headings = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-    const playerHeading = -this.state.player.rotation.y * 180 / Math.PI;
+    const playerHeading = -this.state.player.rotation[1] * 180 / Math.PI;
 
     headings.forEach((h, i) => {
       const angle = i * Math.PI / 4;
@@ -196,6 +202,3 @@ export class Minimap {
     this.ctx.fill();
   }
 }
-
-// Add CONSTANTS import
-import { CONSTANTS } from '../constants';

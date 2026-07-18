@@ -3,6 +3,7 @@
 // ============================================
 
 export type Vector3 = [number, number, number];
+export type Vector2 = [number, number];
 export type Stance = 'Stand' | 'Crouch' | 'Prone';
 export type WeaponClass = 'AR' | 'SMG' | 'SR' | 'DMR' | 'SG' | 'Pistol' | 'Melee' | 'Throw';
 
@@ -44,9 +45,38 @@ export interface WeaponTemplate {
   Price: { Cash: number; Credits: number };
 }
 
+export interface ItemTemplate {
+  Id: string;
+  Name: string;
+  Category: string;
+  SubCategory?: string;
+  Description: string;
+  Model?: string;
+  Icon: string;
+  StackSize: number;
+  Weight: number;
+  Rarity: string;
+  Price?: { Cash: number; Credits: number };
+  UseFunction?: string;
+  UseTime?: number;
+  Cooldown?: number;
+  Metadata?: Record<string, any>;
+}
+
+export interface InventoryItem {
+  id: string;
+  templateId: string;
+  quantity: number;
+  durability?: number;
+  metadata?: Record<string, any>;
+  icon?: string;
+  rarity?: string;
+}
+
 export interface PlayerState {
   position: Vector3;
   velocity: Vector3;
+  rotation: Vector3;
   stance: Stance;
   isMoving: boolean;
   isSprinting: boolean;
@@ -64,6 +94,11 @@ export interface PlayerState {
   stanceTransitionTime: number;
   slideEndTime: number;
   leanTarget: number;
+  inventoryWeight: number;
+  maxWeight: number;
+  isGrounded: boolean;
+  isInGasDamageCooldown: boolean;
+  id: number;
 }
 
 export interface ZoneState {
@@ -78,6 +113,20 @@ export interface ZoneState {
   tickInterval: number;
 }
 
+export interface SquadMember {
+  userId: number;
+  username: string;
+  position: Vector3;
+  health: number;
+  armor: number;
+  isAlive: boolean;
+}
+
+export interface SquadData {
+  id: string;
+  members: SquadMember[];
+}
+
 export interface GameState {
   player: PlayerState;
   zone: ZoneState;
@@ -86,6 +135,10 @@ export interface GameState {
   matchTime: number;
   isInGas: boolean;
   gasIntensity: number;
+  squad: SquadData | null;
+  keys: Record<string, boolean>;
+  mouse: { x: number; y: number; locked: boolean };
+  isADS: boolean;
 }
 
 export interface KillFeedEntry {

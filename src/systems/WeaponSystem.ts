@@ -3,10 +3,10 @@
 // ============================================
 
 import * as THREE from 'three';
-import { GameState, WeaponTemplate, Vector3 } from '../types';
+import type { GameState, WeaponTemplate, Vector3 } from '../types';
 import { CONSTANTS } from '../constants';
 
-export interface WeaponInstance {
+interface WeaponInstance {
   template: WeaponTemplate;
   currentAmmo: number;
   reserveAmmo: number;
@@ -21,7 +21,7 @@ export interface WeaponInstance {
 
 const WEAPONS: Record<string, WeaponTemplate> = {
   AK74: {
-    Id: 'AK74', Name: 'AK-74', Class: 'AR',
+    Id: 'AK74', Name: 'AK-74', Class: 'AR', Model: '', ViewModel: '', Icon: '',
     Stats: {
       Damage: 36, FireRate: 600, MuzzleVelocity: 800, Range: 600,
       RecoilPattern: {}, RecoilRecovery: 8, Spread: 0.003, SpreadADS: 0.0015,
@@ -32,7 +32,7 @@ const WEAPONS: Record<string, WeaponTemplate> = {
     Attachments: {}, Animations: {}, Sounds: {}, Rarity: 'Common', Price: { Cash: 0, Credits: 0 },
   },
   M416: {
-    Id: 'M416', Name: 'M416', Class: 'AR',
+    Id: 'M416', Name: 'M416', Class: 'AR', Model: '', ViewModel: '', Icon: '',
     Stats: {
       Damage: 35, FireRate: 750, MuzzleVelocity: 850, Range: 650,
       RecoilPattern: {}, RecoilRecovery: 9, Spread: 0.0025, SpreadADS: 0.0012,
@@ -43,7 +43,7 @@ const WEAPONS: Record<string, WeaponTemplate> = {
     Attachments: {}, Animations: {}, Sounds: {}, Rarity: 'Uncommon', Price: { Cash: 500, Credits: 50 },
   },
   AWM: {
-    Id: 'AWM', Name: 'AWM', Class: 'SR',
+    Id: 'AWM', Name: 'AWM', Class: 'SR', Model: '', ViewModel: '', Icon: '',
     Stats: {
       Damage: 120, FireRate: 35, MuzzleVelocity: 900, Range: 1200,
       RecoilPattern: {}, RecoilRecovery: 5, Spread: 0.0005, SpreadADS: 0.0001,
@@ -62,7 +62,6 @@ export class WeaponSystem {
   private rayCaster: THREE.Raycaster;
   private currentWeapon: WeaponInstance | null = null;
   private isFiring = false;
-  private fireInterval: number | null = null;
   private muzzleFlash: THREE.Mesh | null = null;
   private bulletTrails: THREE.Line[] = [];
 
@@ -77,9 +76,7 @@ export class WeaponSystem {
 
   private createMuzzleFlash(): void {
     const geo = new THREE.PlaneGeometry(0.5, 0.5);
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xffaa00, transparent: true, opacity: 0, side: THREE.DoubleSide,
-    });
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0, side: THREE.DoubleSide });
     this.muzzleFlash = new THREE.Mesh(geo, mat);
     this.muzzleFlash.name = 'muzzleFlash';
     this.camera.add(this.muzzleFlash);
@@ -115,7 +112,7 @@ export class WeaponSystem {
 
     const now = performance.now();
     const fireRate = this.currentWeapon.template.Stats.FireRate;
-    const fireInterval = 60000 / fireRate; // ms between shots
+    const fireInterval = 60000 / fireRate;
 
     if (now - this.currentWeapon.lastFireTime < fireInterval) return;
 
@@ -130,11 +127,6 @@ export class WeaponSystem {
   }
 
   stopFire(): void {
-    // For semi-auto or when releasing trigger
-    if (this.fireInterval) {
-      clearInterval(this.fireInterval);
-      this.fireInterval = null;
-    }
     this.isFiring = false;
   }
 
@@ -157,7 +149,6 @@ export class WeaponSystem {
 
     this.currentWeapon.reloadEndTime = reloadTime;
 
-    // Animation would go here
     setTimeout(() => {
       if (!this.currentWeapon) return;
       const needed = this.currentWeapon.template.Stats.MagSize - this.currentWeapon.currentAmmo;
@@ -171,12 +162,10 @@ export class WeaponSystem {
 
   melee(): void {
     console.log('Melee attack!');
-    // Raycast forward, deal melee damage
   }
 
   throwGrenade(): void {
     console.log('Throw grenade!');
-    // Physics projectile
   }
 
   update(delta: number): void {
@@ -214,18 +203,15 @@ export class WeaponSystem {
     if (!this.currentWeapon) return;
     const stats = this.currentWeapon.template.Stats;
 
-    // Base recoil
     const vertical = 0.5 + Math.random() * 0.3;
     const horizontal = (Math.random() - 0.5) * 0.4;
 
     this.currentWeapon.recoil.pitch += vertical;
     this.currentWeapon.recoil.yaw += horizontal;
 
-    // Apply to camera
     this.camera.rotation.x -= vertical * 0.01;
     this.camera.rotation.y += horizontal * 0.01;
 
-    // Spread increase
     this.currentWeapon.spread = Math.min(
       stats.Spread * 3,
       this.currentWeapon.spread + 0.001
@@ -246,7 +232,6 @@ export class WeaponSystem {
     const origin = new THREE.Vector3().copy(this.camera.position);
     const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
 
-    // Apply spread
     const spread = this.currentWeapon.spread * (this.state.isADS ? 0.3 : 1);
     const spreadVec = new THREE.Vector3(
       (Math.random() - 0.5) * spread,
@@ -255,7 +240,6 @@ export class WeaponSystem {
     );
     direction.add(spreadVec).normalize();
 
-    // Raycast
     this.rayCaster.set(origin, direction);
     const intersects = this.rayCaster.intersectObjects(this.scene.children, true);
 
@@ -275,14 +259,11 @@ export class WeaponSystem {
         new Float32Array([origin.x, origin.y, origin.z, hit.point.x, hit.point.y, hit.point.z]), 3
       ));
 
-      // Hit effect
       this.createHitEffect(hit.point, hit.face?.normal);
 
-      // Damage
       const dmg = this.calculateDamage(stats.Damage, hit.distance);
       console.log(`Hit ${hit.object.name} for ${dmg} damage at ${hit.distance.toFixed(1)}m`);
     } else {
-      // Max range
       const end = origin.clone().add(direction.multiplyScalar(stats.Range));
       trailGeo.setAttribute('position', new THREE.BufferAttribute(
         new Float32Array([origin.x, origin.y, origin.z, end.x, end.y, end.z]), 3
@@ -296,7 +277,6 @@ export class WeaponSystem {
   }
 
   private createHitEffect(position: THREE.Vector3, normal?: THREE.Vector3): void {
-    // Spark particles
     const geo = new THREE.SphereGeometry(0.05, 4, 4);
     const mat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
     for (let i = 0; i < 8; i++) {
@@ -315,6 +295,32 @@ export class WeaponSystem {
       };
       animate();
     }
+  }
+
+  private createHitEffect(position: THREE.Vector3, normal?: THREE.Vector3): void {
+    const geo = new THREE.SphereGeometry(0.05, 4, 4);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+    for (let i = 0; i < 8; i++) {
+      const spark = new THREE.Mesh(geo, mat);
+      spark.position.copy(position);
+      this.scene.add(spark);
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * 5, Math.random() * 3, (Math.random() - 0.5) * 5
+      );
+      const animate = () => {
+        if (!spark.parent) return;
+        spark.position.addScaledVector(vel, 0.016);
+        vel.y -= 0.01;
+        if (spark.position.y < 0) { this.scene.remove(spark); return; }
+        requestAnimationFrame(animate);
+      };
+      animate();
+    }
+  }
+
+  private calculateDamage(baseDamage: number, distance: number): number {
+    const falloff = Math.max(0, 1 - distance / 500);
+    return Math.round(baseDamage * falloff);
   }
 
   getCurrentWeapon(): WeaponInstance | null {

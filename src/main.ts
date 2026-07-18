@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { CONSTANTS } from './constants';
-import { Vector3, WeaponTemplate, ItemTemplate } from './types';
+import type { Vector3, WeaponTemplate, GameState, Stance, SquadData } from './types';
 import { MovementSystem } from './systems/MovementSystem';
 import { ZoneSystem } from './systems/ZoneSystem';
 import { WeaponSystem } from './systems/WeaponSystem';
@@ -13,59 +13,55 @@ import { Minimap } from './ui/Minimap';
 import { InventoryUI } from './ui/InventoryUI';
 
 // ============================================
-// GAME STATE
+// GAME STATE - Using imported types
 // ============================================
-
-interface PlayerState {
-  position: Vector3;
-  velocity: Vector3;
-  rotation: Vector3;
-  stance: 'Stand' | 'Crouch' | 'Prone';
-  isMoving: boolean;
-  isSprinting: boolean;
-  isSliding: boolean;
-  lean: number;
-  health: number;
-  armor: number;
-  currentWeapon: WeaponTemplate | null;
-  ammo: number;
-  maxAmmo: number;
-  fireMode: 'auto' | 'semi';
-}
-
-interface GameState {
-  player: PlayerState;
-  zone: { center: Vector3; radius: number; phase: number; isShrinking: boolean; nextPhaseTime: number };
-  aliveCount: number;
-  killFeed: Array<{ killer: string; victim: string; weapon: string; time: number }>;
-  isADS: boolean;
-  keys: Record<string, boolean>;
-  mouse: { x: number; y: number; locked: boolean };
-}
 
 const state: GameState = {
   player: {
-    position: { x: 0, y: 1.7, z: 0 },
-    velocity: { x: 0, y: 0, z: 0 },
-    rotation: { x: 0, y: 0, z: 0 },
+    position: [0, 1.7, 0],
+    velocity: [0, 0, 0],
+    rotation: [0, 0, 0],
     stance: 'Stand',
     isMoving: false,
     isSprinting: false,
     isSliding: false,
+    isADS: false,
     lean: 0,
     health: 100,
     armor: 0,
+    maxHealth: 100,
+    maxArmor: 100,
     currentWeapon: null,
     ammo: 30,
     maxAmmo: 30,
     fireMode: 'auto',
+    stanceTransitionTime: 0,
+    slideEndTime: 0,
+    leanTarget: 0,
+    inventoryWeight: 0,
+    maxWeight: 100,
+    isGrounded: true,
+    isInGasDamageCooldown: false,
+    id: 0,
   },
-  zone: { center: { x: 0, y: 0, z: 0 }, radius: 2000, phase: 0, isShrinking: false, nextPhaseTime: 0 },
-  aliveCount: 100,
-  killFeed: [],
-  isADS: false,
-  keys: {},
+  zone: { center: [0, 0, 0], radius: 2000, phase: 0, phaseEndTime: 0, isShrinking: false, damagePerTick: 2, tickInterval: 2 },
+  alivePlayers: 100,
+  currentPhase: 0,
+  matchTime: 0,
+  isInGas: false,
+  gasIntensity: 0,
+  squad: null,
+  keys: {} as Record<string, boolean>,
   mouse: { x: 0, y: 0, locked: false },
+  isADS: false,
+};
+
+// Local extended state
+const localState = {
+  ...state,
+  keys: {} as Record<string, boolean>,
+  mouse: { x: 0, y: 0, locked: false },
+  isADS: false,
 };
 
 // ============================================
@@ -117,9 +113,7 @@ function initThree() {
 
   // Ground
   const groundGeo = new THREE.PlaneGeometry(10000, 10000, 100, 100);
-  const groundMat = new THREE.MeshStandardMaterial({
-    color: 0x1a1a2e, roughness: 0.9, metalness: 0.1,
-  });
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.9, metalness: 0.1 });
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
@@ -152,9 +146,7 @@ function initThree() {
 
   // Zone visualization
   const zoneGeo = new THREE.RingGeometry(1990, 2010, 64);
-  const zoneMat = new THREE.MeshBasicMaterial({
-    color: 0x00b4ff, side: THREE.DoubleSide, transparent: true, opacity: 0.15,
-  });
+  const zoneMat = new THREE.MeshBasicMaterial({ color: 0x00b4ff, side: THREE.DoubleSide, transparent: true, opacity: 0.15 });
   const zoneRing = new THREE.Mesh(zoneGeo, zoneMat);
   zoneRing.rotation.x = -Math.PI / 2;
   zoneRing.position.y = 0.1;
@@ -202,10 +194,9 @@ function initInput() {
     if (e.button === 0) { weaponSystem.stopFire(); }
   });
 
-  document.addEventListener('contextmenu', (e) => e.preventDefault()); // Disable right-click menu
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
 
   document.addEventListener('wheel', (e) => {
-    // Scroll to switch weapons or zoom
     if (state.isADS) {
       camera.fov = Math.max(30, Math.min(70, camera.fov - e.deltaY * 0.05));
       camera.updateProjectionMatrix();
@@ -250,7 +241,6 @@ function handleKeyPress(code: string) {
       weaponSystem.toggleFireMode();
       break;
     case 'ShiftLeft':
-      // Sprint handled in movement
       break;
     case 'ControlLeft':
       if (state.player.isSprinting) {
@@ -268,9 +258,12 @@ function handleKeyPress(code: string) {
       else movementSystem.jump();
       break;
     case 'KeyE':
-      // Interact
       break;
   }
+}
+
+function lockMouse() {
+  renderer.domElement.requestPointerLock();
 }
 
 // ============================================
@@ -327,7 +320,8 @@ function animate() {
   minimap.update();
 
   // Camera follow
-  camera.position.lerp(state.player.position, 0.15);
+  const targetPos = new THREE.Vector3(...state.player.position);
+  camera.position.lerp(targetPos, 0.15);
   camera.rotation.order = 'YXZ';
   camera.rotation.y = state.mouse.x;
   camera.rotation.x = state.mouse.y;
@@ -363,7 +357,7 @@ async function start() {
   // Add demo kill feed entries
   setTimeout(() => hud.addKillFeed('Player1', 'Player2', 'AK-74'), 3000);
   setTimeout(() => hud.addKillFeed('Player3', 'Player4', 'AWM'), 6000);
-  setTimeout(() => hud.showZoneWarning('Phase 2', 'Next zone in 30s'), 8000);
+  setTimeout(() => hud.showZoneWarning(2, 'Next zone in 30s'), 8000);
   setTimeout(() => hud.hideZoneWarning(), 12000);
 
   console.log('🎮 Battle Royale Web Demo Started!');

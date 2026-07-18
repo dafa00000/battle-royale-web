@@ -1,5 +1,5 @@
 // ============================================
-// ZONE SYSTEM - Safe Zone / Gas
+// ZONE SYSTEM - Safe Zone / Gas (Clean Version)
 // ============================================
 
 import * as THREE from 'three';
@@ -37,7 +37,6 @@ export class ZoneSystem {
       this.scene.add(this.zoneRing);
     }
 
-    // Next zone preview ring
     const nextGeo = new THREE.RingGeometry(990, 1010, 64);
     const nextMat = new THREE.MeshBasicMaterial({ color: 0xff8c00, side: THREE.DoubleSide, transparent: true, opacity: 0.1 });
     this.nextZoneRing = new THREE.Mesh(nextGeo, nextMat);
@@ -60,6 +59,7 @@ export class ZoneSystem {
     };
     this.phaseTimer = phase.duration;
     this.warningTimer = phase.warningTime;
+    this.isWarning = false;
 
     this.updateZoneVisuals();
   }
@@ -86,16 +86,8 @@ export class ZoneSystem {
         uniform float uTime; uniform vec3 uColor1; uniform vec3 uColor2;
         uniform float uNoiseScale; uniform float uScrollSpeed; uniform float uIntensity;
         varying vec2 vUv; varying vec3 vWorldPos;
-        float noise(vec2 p) {
-          return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-        }
-        float fbm(vec2 p) {
-          float f = 0.0; float a = 0.5; vec2 s = p;
-          for (int i = 0; i < 5; i++) {
-            f += a * noise(s); s *= 2.0; a *= 0.5;
-          }
-          return f;
-        }
+        float noise(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+        float fbm(vec2 p) { float f = 0.0; float a = 0.5; vec2 s = p; for (int i = 0; i < 5; i++) { f += a * noise(s); s *= 2.0; a *= 0.5; } return f; }
         void main() {
           float n = fbm(vUv * uNoiseScale + uTime * uScrollSpeed);
           vec3 color = mix(uColor1, uColor2, n);
@@ -138,15 +130,9 @@ export class ZoneSystem {
     this.isWarning = true;
     if (this.nextZoneRing) {
       this.nextZoneRing.visible = true;
-      // Pulse animation
       this.animateWarningRing();
     }
-    // Trigger UI warning
-    const nextPhase = CONSTANTS.ZONE_PHASES[this.phaseIndex + 1];
-    if (nextPhase) {
-      this.state.isInGas = true; // For UI
-      // Show warning via HUD (handled in main)
-    }
+    this.state.isInGas = true; // For UI
   }
 
   private animateWarningRing(): void {
@@ -195,7 +181,7 @@ export class ZoneSystem {
 
     if (this.nextZoneRing) this.nextZoneRing.visible = false;
 
-    // Update minimap will be handled in main
+    this.updateZoneVisuals();
   }
 
   private animateZoneTransition(
@@ -261,16 +247,11 @@ export class ZoneSystem {
   }
 
   private updateGasEffect(): void {
-    // Post-processing handled in main render or could use composer
     const vignette = document.getElementById('gas-vignette');
     if (vignette) {
       vignette.style.opacity = (this.state.gasIntensity * 0.5).toString();
       vignette.style.background = `radial-gradient(ellipse at center, transparent 40%, rgba(0, 80, 40, ${this.state.gasIntensity * 0.6}) 100%)`;
     }
-  }
-
-  private update(delta: number): void {
-    this.gasMaterial.uniforms.uIntensity.value = this.state.gasIntensity;
   }
 
   private animateZoneVisuals(delta: number): void {
