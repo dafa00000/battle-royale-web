@@ -442,19 +442,14 @@ function initMobileControls(): void {
   if (crouchBtn) {
     crouchBtn.addEventListener('touchstart', (e) => {
       e.preventDefault();
-      state.player.stance = state.player.stance === 'Stand' ? 'Crouch' : 'Stand';
-      screenShake(2, 80);
+      crouchButtonHandler();
     }, { passive: false });
   }
 
   if (jumpBtn) {
     jumpBtn.addEventListener('touchstart', (e) => {
       e.preventDefault();
-      if (state.player.isGrounded) {
-        state.player.velocity[1] = 6;
-        state.player.isGrounded = false;
-        screenShake(1.5, 100);
-      }
+      jumpButtonHandler();
     }, { passive: false });
   }
 
@@ -699,10 +694,11 @@ function init3DScene(): void {
   if (!canvas) return;
 
   scene3D = new THREE.Scene();
-  scene3D.background = new THREE.Color(0x0a0a0f);
-  scene3D.fog = new THREE.Fog(0x0a0a0f, 30, 200);
+  scene3D.background = new THREE.Color(0x1a2030);
+  // FogExp2 for gritty RE vibe
+  scene3D.fog = new THREE.FogExp2(0x141820, 0.012);
 
-  camera3D = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
+  camera3D = new THREE.PerspectiveCamera(80, window.innerWidth / window.innerHeight, 0.01, 1000);
   camera3D.rotation.order = 'YXZ';
 
   renderer3D = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
@@ -711,73 +707,149 @@ function init3DScene(): void {
   renderer3D.shadowMap.enabled = true;
   renderer3D.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer3D.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer3D.toneMappingExposure = 1.1;
+  renderer3D.toneMappingExposure = 1.05;
 
-  // === Lighting ===
-  const ambient = new THREE.AmbientLight(0x40404a, 0.6);
+  // === Lighting (Resident Evil gritty) ===
+  // Low ambient for dark vibe
+  const ambient = new THREE.AmbientLight(0x202830, 0.35);
   scene3D.add(ambient);
 
-  const sun = new THREE.DirectionalLight(0xffd5a0, 1.0);
-  sun.position.set(50, 80, 30);
+  // Sharp sun with long shadows
+  const sun = new THREE.DirectionalLight(0xffd5a0, 1.4);
+  sun.position.set(60, 100, 40);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.near = 1;
-  sun.shadow.camera.far = 300;
-  sun.shadow.camera.left = -80;
-  sun.shadow.camera.right = 80;
-  sun.shadow.camera.top = 80;
-  sun.shadow.camera.bottom = -80;
+  sun.shadow.camera.far = 400;
+  sun.shadow.camera.left = -100;
+  sun.shadow.camera.right = 100;
+  sun.shadow.camera.top = 100;
+  sun.shadow.camera.bottom = -100;
+  sun.shadow.bias = -0.0005;
+  sun.shadow.normalBias = 0.04;
   scene3D.add(sun);
 
-  const fill = new THREE.HemisphereLight(0x88aaff, 0x221100, 0.25);
-  scene3D.add(fill);
+  // Hemisphere fill (sky blue ↔ ground brown)
+  const hemi = new THREE.HemisphereLight(0x88a0cc, 0x201810, 0.35);
+  scene3D.add(hemi);
 
-  // === Ground ===
-  const groundGeo = new THREE.PlaneGeometry(400, 400, 32, 32);
-  const groundMat = new THREE.MeshStandardMaterial({
-    color: 0x1a1a24, roughness: 0.85, metalness: 0.1,
-  });
+  // === Textured checkerboard ground (concrete tiles) ===
+  const groundSize = 400;
+  const groundGeo = new THREE.PlaneGeometry(groundSize, groundSize, 1, 1);
+  const groundMat = createCheckerGroundMaterial();
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene3D.add(ground);
 
-  // Grid overlay for tactical feel
-  const grid = new THREE.GridHelper(400, 80, 0x2a3a4a, 0x1a2030);
-  (grid.material as THREE.Material).opacity = 0.35;
-  (grid.material as THREE.Material).transparent = true;
-  grid.position.y = 0.01;
-  scene3D.add(grid);
-
-  // === Buildings (placeholder cover) ===
+  // === Buildings (dark cover, for visual reference when moving) ===
   const buildingMat = new THREE.MeshStandardMaterial({
-    color: 0x252530, roughness: 0.8, metalness: 0.15,
+    color: 0x1a1e26, roughness: 0.78, metalness: 0.2,
   });
-  for (let i = 0; i < 15; i++) {
-    const w = 3 + Math.random() * 5;
-    const h = 5 + Math.random() * 15;
-    const d = 3 + Math.random() * 5;
-    const building = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), buildingMat);
-    building.position.set(
-      (Math.random() - 0.5) * 150,
-      h / 2,
-      (Math.random() - 0.5) * 150
+  const accentMat = new THREE.MeshStandardMaterial({
+    color: 0x2a2e36, roughness: 0.65, metalness: 0.35,
+  });
+  // Fixed seed for consistent layout
+  let seed = 1337;
+  const rng = () => {
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  };
+  for (let i = 0; i < 18; i++) {
+    const w = 4 + rng() * 8;
+    const h = 6 + rng() * 20;
+    const d = 4 + rng() * 8;
+    const isAccent = rng() > 0.7;
+    const building = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, d),
+      isAccent ? accentMat : buildingMat
     );
+    const angle = rng() * Math.PI * 2;
+    const dist = 20 + rng() * 120;
+    building.position.set(
+      Math.cos(angle) * dist,
+      h / 2,
+      Math.sin(angle) * dist
+    );
+    building.rotation.y = rng() * Math.PI;
     building.castShadow = true;
     building.receiveShadow = true;
     scene3D.add(building);
   }
 
+  // === Crate cover (small boxes scattered) ===
+  const crateMat = new THREE.MeshStandardMaterial({
+    color: 0x4a3420, roughness: 0.88, metalness: 0.05,
+  });
+  for (let i = 0; i < 12; i++) {
+    const crate = new THREE.Mesh(
+      new THREE.BoxGeometry(1.2 + rng() * 0.5, 1.2, 1.2 + rng() * 0.5),
+      crateMat
+    );
+    crate.position.set(
+      (rng() - 0.5) * 180,
+      0.6,
+      (rng() - 0.5) * 180
+    );
+    crate.castShadow = true;
+    crate.receiveShadow = true;
+    scene3D.add(crate);
+  }
+
   // === Zone ring (visual) ===
-  const zoneGeo = new THREE.RingGeometry(198, 200, 64);
+  const zoneGeo = new THREE.RingGeometry(1.99, 2, 64);
   const zoneMat = new THREE.MeshBasicMaterial({
-    color: 0x00b4ff, side: THREE.DoubleSide, transparent: true, opacity: 0.6,
+    color: 0x00b4ff, side: THREE.DoubleSide, transparent: true, opacity: 0.7,
   });
   const zoneRing = new THREE.Mesh(zoneGeo, zoneMat);
   zoneRing.rotation.x = -Math.PI / 2;
-  zoneRing.position.y = 0.1;
+  zoneRing.position.y = 0.02;
   zoneRing.name = 'zoneRing3D';
   scene3D.add(zoneRing);
+
+  // Inner zone fill (subtle blue glow)
+  const zoneFillGeo = new THREE.CircleGeometry(1.99, 64);
+  const zoneFillMat = new THREE.MeshBasicMaterial({
+    color: 0x00b4ff, transparent: true, opacity: 0.05, side: THREE.DoubleSide,
+  });
+  const zoneFill = new THREE.Mesh(zoneFillGeo, zoneFillMat);
+  zoneFill.rotation.x = -Math.PI / 2;
+  zoneFill.position.y = 0.01;
+  zoneFill.name = 'zoneFill3D';
+  scene3D.add(zoneFill);
+
+  // === Fog gradient skybox (large sphere with gradient shader) ===
+  const skyGeo = new THREE.SphereGeometry(500, 32, 16);
+  const skyMat = new THREE.ShaderMaterial({
+    uniforms: {
+      topColor: { value: new THREE.Color(0x182030) },
+      bottomColor: { value: new THREE.Color(0x0a0d14) },
+      offset: { value: 33 },
+      exponent: { value: 0.6 },
+    },
+    vertexShader: `
+      varying vec3 vWorldPos;
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 topColor; uniform vec3 bottomColor;
+      uniform float offset; uniform float exponent;
+      varying vec3 vWorldPos;
+      void main() {
+        float h = normalize(vWorldPos + vec3(0.0, offset, 0.0)).y;
+        float t = max(pow(max(h, 0.0), exponent), 0.0);
+        gl_FragColor = vec4(mix(bottomColor, topColor, t), 1.0);
+      }
+    `,
+    side: THREE.BackSide,
+    depthWrite: false,
+  });
+  const sky = new THREE.Mesh(skyGeo, skyMat);
+  scene3D.add(sky);
 
   // === FPS Viewmodel ===
   viewModel = new ViewModel(scene3D, camera3D);
@@ -789,42 +861,194 @@ function init3DScene(): void {
     renderer3D.setSize(window.innerWidth, window.innerHeight);
   });
 
-  console.log('3D scene initialized ✓');
+  console.log('3D scene initialized ✓ - Ground textures, fog, buildings, lighting');
 }
 
-function update3DScene(delta: number): void {
-  if (!camera3D || !renderer3D) return;
+// ============================================
+// Checkerboard ground material (concrete tiles)
+// ============================================
+function createCheckerGroundMaterial(): THREE.MeshStandardMaterial {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
 
-  // Camera from player yaw/pitch
+  // Base concrete
+  ctx.fillStyle = '#2a2e34';
+  ctx.fillRect(0, 0, 256, 256);
+
+  // Checkerboard tiles
+  const tile = 64;
+  for (let y = 0; y < 256; y += tile) {
+    for (let x = 0; x < 256; x += tile) {
+      const isLight = ((x / tile) + (y / tile)) % 2 === 0;
+      ctx.fillStyle = isLight ? '#32363e' : '#22262c';
+      ctx.fillRect(x, y, tile, tile);
+    }
+  }
+
+  // Noise speckle (gritty)
+  for (let i = 0; i < 4000; i++) {
+    const x = Math.random() * 256;
+    const y = Math.random() * 256;
+    const g = Math.floor(Math.random() * 30);
+    ctx.fillStyle = `rgba(${g},${g},${g + 4},0.4)`;
+    ctx.fillRect(x, y, 1, 1);
+  }
+
+  // Grid lines (tile separators)
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 256; i += tile) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 256); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(256, i); ctx.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(40, 40); // repeat across the 400x400 plane
+  texture.anisotropy = 8;
+
+  const mat = new THREE.MeshStandardMaterial({
+    map: texture,
+    roughness: 0.88,
+    metalness: 0.05,
+  });
+  return mat;
+}
+
+// ============================================
+// CAMERA BOBBING + JUMP/CROUCH PHYSICS
+// ============================================
+const camState = {
+  bobTime: 0,
+  bobIntensity: 0,
+  targetBob: 0,
+  // Crouch
+  camY: 1.6,
+  crouchY: 0.85,
+  isCrouching: false,
+  crouchT: 0, // 0...1 transition
+  // Jump
+  velY: 0,
+  isJumping: false,
+  // Base camera offset (player height)
+  baseY: 1.6,
+};
+
+function crouchButtonHandler(): void {
+  camState.isCrouching = !camState.isCrouching;
+  camState.crouchT = 0;
+  screenShake(1.5, 80);
+}
+
+function jumpButtonHandler(): void {
+  if (camState.isJumping) return;
+  camState.velY = 8; // jump velocity
+  camState.isJumping = true;
+  screenShake(1.5, 100);
+}
+
+function updateCameraPhysics(delta: number): void {
+  // === Crouch tween (lerp over 0.2s) ===
+  if (camState.crouchT < 1) {
+    camState.crouchT = Math.min(1, camState.crouchT + delta / 0.2);
+    const targetY = camState.isCrouching ? camState.crouchY : camState.baseY;
+    const fromY = camState.isCrouching ? camState.baseY : camState.crouchY;
+    const eased = 1 - Math.pow(1 - camState.crouchT, 3); // easeOutCubic
+    camState.camY = THREE.MathUtils.lerp(fromY, targetY, eased);
+  }
+
+  // === Jump physics (parabolic arc) ===
+  if (camState.isJumping) {
+    camState.velY -= 22 * delta; // gravity
+    camState.camY += camState.velY * delta;
+    if (camState.camY <= (camState.isCrouching ? camState.crouchY : camState.baseY)) {
+      camState.camY = camState.isCrouching ? camState.crouchY : camState.baseY;
+      camState.velY = 0;
+      camState.isJumping = false;
+      screenShake(0.8, 60); // landing thud
+    }
+  }
+
+  // === Camera head-bobbing (GTA V heavy feel) ===
+  const isMoving = state.player.isMoving;
+  const speedFactor = state.player.isSprinting ? 1.8 : 1.0;
+
+  if (isMoving && !camState.isJumping) {
+    camState.bobTime += delta * 10 * speedFactor;
+    // Heavier when sprinting
+    camState.targetBob = state.player.isSprinting ? 0.05 : 0.028;
+  } else {
+    // Decay when idle
+    camState.targetBob = 0;
+  }
+  camState.bobIntensity = THREE.MathUtils.lerp(camState.bobIntensity, camState.targetBob, delta * 6);
+
+  // Apply bob + crouch + jump to camera Y
+  const bobY = Math.sin(camState.bobTime) * camState.bobIntensity;
+  const bobX = Math.cos(camState.bobTime * 0.5) * camState.bobIntensity * 0.55;
+
+  // Roll (Z rotation) for sway
+  const bobRoll = Math.cos(camState.bobTime * 0.5) * camState.bobIntensity * 0.4;
+
+  // Scale player position to camera position
+  // Player uses map units; camera follows same coordinate
+  // Apply bob on top of head height
+  camera3D.position.set(
+    state.player.position[0] + bobX,
+    camState.camY + bobY,
+    state.player.position[2]
+  );
+
+  // Slight roll for head bob
+  camera3D.rotation.z = bobRoll;
+
+  // FOV changes during sprint (ads style)
+  const targetFOV = state.player.isSprinting ? 85 : 80;
+  camera3D.fov = THREE.MathUtils.lerp(camera3D.fov, targetFOV, delta * 4);
+  camera3D.updateProjectionMatrix();
+}
+function loop(): void {
+  drawRadar();
+  updateMobileMovement(0.016);
+  updateCameraPhysics(0.016);
+  updateViewModelScene(0.016);
+  // Random gas effect fluctuation
+  const gasIntensity = state.isInGas ? 0.7 + Math.sin(Date.now() / 4000) * 0.2 : (Math.sin(Date.now() / 4000) + 1) / 2 * 0.3;
+  updateGasEffect(gasIntensity);
+  requestAnimationFrame(loop);
+}
+
+// Update viewmodel + scene render (extracted from old update3DScene)
+function updateViewModelScene(delta: number): void {
+  if (!camera3D || !renderer3D) return;
+  // Yaw/pitch from look state
   camera3D.rotation.y = state.mouse.x;
   camera3D.rotation.x = state.mouse.y;
 
-  // Compute look delta for viewmodel sway
+  // Viewmodel sway delta
   const lookDx = state.mouse.x - lastLookDx;
   const lookDy = state.mouse.y - lastLookDy;
   lastLookDx = state.mouse.x;
   lastLookDy = state.mouse.y;
 
-  viewModel.updateSway(lookDx, lookDy, delta);
-  viewModel.update(delta, state.player.isMoving, state.player.isSprinting);
+  if (viewModel) {
+    viewModel.updateSway(lookDx, lookDy, delta);
+    viewModel.update(delta, state.player.isMoving, state.player.isSprinting);
+  }
 
-  // Update zone ring scale (shrink simulation)
+  // Zone ring shrink
   const zoneRing = scene3D.getObjectByName('zoneRing3D') as THREE.Mesh;
   if (zoneRing) {
     const scale = 0.5 + (8 - state.zonePhase) * 0.07;
-    zoneRing.scale.setScalar(Math.max(0.1, scale));
+    zoneRing.scale.setScalar(Math.max(0.1, scale) * 100);
   }
+  const zoneFill = scene3D.getObjectByName('zoneFill3D') as THREE.Mesh;
+  if (zoneFill) zoneFill.scale.setScalar(Math.max(0.1, 0.5 + (8 - state.zonePhase) * 0.07) * 100);
 
   renderer3D.render(scene3D, camera3D);
-}
-function loop(): void {
-  drawRadar();
-  updateMobileMovement(0.016);
-  update3DScene(0.016);
-  // Random gas effect fluctuation
-  const gasIntensity = state.isInGas ? 0.7 + Math.sin(Date.now() / 4000) * 0.2 : (Math.sin(Date.now() / 4000) + 1) / 2 * 0.3;
-  updateGasEffect(gasIntensity);
-  requestAnimationFrame(loop);
 }
 
 // ============================================
