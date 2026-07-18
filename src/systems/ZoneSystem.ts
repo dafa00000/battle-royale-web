@@ -132,7 +132,7 @@ export class ZoneSystem {
       this.nextZoneRing.visible = true;
       this.animateWarningRing();
     }
-    this.state.isInGas = true; // For UI
+    this.state.isInGas = true;
   }
 
   private animateWarningRing(): void {
@@ -226,7 +226,6 @@ export class ZoneSystem {
       const overflow = dist - this.state.zone.radius;
       this.state.gasIntensity = Math.min(1, overflow / 500);
 
-      // Apply damage over time
       if (!p.isInGasDamageCooldown) {
         p.health -= this.state.zone.damagePerTick * delta;
         p.health = Math.max(0, p.health);
@@ -237,10 +236,8 @@ export class ZoneSystem {
       this.state.gasIntensity = 0;
     }
 
-    // Update visual post-process for gas
     this.updateGasEffect();
 
-    // Notify UI of gas state change
     if (wasInGas !== this.state.isInGas) {
       // UI will read state.isInGas
     }

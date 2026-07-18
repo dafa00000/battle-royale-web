@@ -1,5 +1,5 @@
 // ============================================
-// WEAPON SYSTEM
+// WEAPON SYSTEM - Simplified for build
 // ============================================
 
 import * as THREE from 'three';
@@ -61,7 +61,6 @@ export class WeaponSystem {
   private scene: THREE.Scene;
   private rayCaster: THREE.Raycaster;
   private currentWeapon: WeaponInstance | null = null;
-  private isFiring = false;
   private muzzleFlash: THREE.Mesh | null = null;
   private bulletTrails: THREE.Line[] = [];
 
@@ -126,9 +125,7 @@ export class WeaponSystem {
     this.simulateBullet();
   }
 
-  stopFire(): void {
-    this.isFiring = false;
-  }
+  stopFire(): void {}
 
   toggleFireMode(): void {
     if (!this.currentWeapon) return;
@@ -160,22 +157,15 @@ export class WeaponSystem {
     }, reloadTime * 1000);
   }
 
-  melee(): void {
-    console.log('Melee attack!');
-  }
-
-  throwGrenade(): void {
-    console.log('Throw grenade!');
-  }
+  melee(): void { console.log('Melee attack!'); }
+  throwGrenade(): void { console.log('Throw grenade!'); }
 
   update(delta: number): void {
     if (!this.currentWeapon) return;
 
-    // Update recoil recovery
     this.currentWeapon.recoil.pitch *= Math.max(0, 1 - this.currentWeapon.template.Stats.RecoilRecovery * delta);
     this.currentWeapon.recoil.yaw *= Math.max(0, 1 - this.currentWeapon.template.Stats.RecoilRecovery * delta);
 
-    // Update reload timer
     if (this.currentWeapon.isReloading) {
       this.currentWeapon.reloadEndTime -= delta;
       if (this.currentWeapon.reloadEndTime <= 0) {
@@ -183,13 +173,11 @@ export class WeaponSystem {
       }
     }
 
-    // Update muzzle flash
     if (this.muzzleFlash) {
       const mat = this.muzzleFlash.material as THREE.MeshBasicMaterial;
       mat.opacity = Math.max(0, mat.opacity - delta * 10);
     }
 
-    // Update bullet trails
     this.bulletTrails.forEach((trail, i) => {
       const ages = (trail.userData as any).age += delta;
       if (ages > 0.1) {
@@ -243,7 +231,6 @@ export class WeaponSystem {
     this.rayCaster.set(origin, direction);
     const intersects = this.rayCaster.intersectObjects(this.scene.children, true);
 
-    // Visual trail
     const trailGeo = new THREE.BufferGeometry();
     const trailPos = new Float32Array([origin.x, origin.y, origin.z, 0, 0, 0]);
     trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
@@ -274,27 +261,6 @@ export class WeaponSystem {
   private calculateDamage(baseDamage: number, distance: number): number {
     const falloff = Math.max(0, 1 - distance / 500);
     return Math.round(baseDamage * falloff);
-  }
-
-  private createHitEffect(position: THREE.Vector3, normal?: THREE.Vector3): void {
-    const geo = new THREE.SphereGeometry(0.05, 4, 4);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
-    for (let i = 0; i < 8; i++) {
-      const spark = new THREE.Mesh(geo, mat);
-      spark.position.copy(position);
-      this.scene.add(spark);
-      const vel = new THREE.Vector3(
-        (Math.random() - 0.5) * 5, Math.random() * 3, (Math.random() - 0.5) * 5
-      );
-      const animate = () => {
-        if (!spark.parent) return;
-        spark.position.addScaledVector(vel, 0.016);
-        vel.y -= 0.01;
-        if (spark.position.y < 0) { this.scene.remove(spark); return; }
-        requestAnimationFrame(animate);
-      };
-      animate();
-    }
   }
 
   private createHitEffect(position: THREE.Vector3, normal?: THREE.Vector3): void {
