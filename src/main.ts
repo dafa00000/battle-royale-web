@@ -1,6 +1,8 @@
 // ============================================
 // BATTLE ROYALE - HUD PROTOTYPE v2 (Full Simulation)
 // ============================================
+import * as THREE from 'three';
+import { ViewModel } from './systems/ViewModel';
 
 interface GameState {
   health: number; maxHealth: number;
@@ -10,6 +12,15 @@ interface GameState {
   zonePhase: number; alive: number;
   isReloading: boolean;
   isInGas: boolean;
+  player: {
+    position: [number, number, number];
+    velocity: [number, number, number];
+    stance: 'Stand' | 'Crouch' | 'Prone';
+    isMoving: boolean;
+    isSprinting: boolean;
+    isGrounded: boolean;
+  };
+  mouse: { x: number; y: number; locked: boolean };
 }
 
 const state: GameState = {
@@ -20,6 +31,11 @@ const state: GameState = {
   zonePhase: 1, alive: 100,
   isReloading: false,
   isInGas: false,
+  player: {
+    position: [0, 1.7, 0], velocity: [0, 0, 0],
+    stance: 'Stand', isMoving: false, isSprinting: false, isGrounded: true,
+  },
+  mouse: { x: 0, y: 0, locked: false },
 };
 
 // ============================================
@@ -271,9 +287,233 @@ function updateGasEffect(intensity: number): void {
 }
 
 // ============================================
+// MOBILE DETECTION & CONTROLS
+// ============================================
+
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+const mobileState = {
+  joystick: { dx: 0, dy: 0, active: false, id: null as number | null, maxDist: 50 },
+  look: { x: 0, y: 0, active: false, id: null as number | null, lastX: 0, lastY: 0 },
+};
+
+function initMobileControls(): void {
+  if (!isTouchDevice) return;
+
+  document.body.classList.add('touch');
+
+  // === Virtual Joystick ===
+  const zone = document.getElementById('leftJoystick');
+  const thumb = document.getElementById('joystickThumb');
+
+  if (!zone || !thumb) return;
+
+  zone.addEventListener('touchstart', (e: TouchEvent) => {
+    if (mobileState.joystick.id !== null) return;
+    const touch = e.changedTouches[0];
+    mobileState.joystick.id = touch.identifier;
+    mobileState.joystick.active = true;
+    thumb.classList.add('active');
+    e.preventDefault();
+  }, { passive: false });
+
+  const handleJoystickMove = (e: TouchEvent) => {
+    for (let i = 0; i < e.touches.length; i++) {
+      const touch = e.touches[i];
+      if (touch.identifier !== mobileState.joystick.id) continue;
+
+      const rect = zone.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      let dx = touch.clientX - centerX;
+      let dy = touch.clientY - centerY;
+
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const maxDist = rect.width / 2 - 20;
+      if (dist > maxDist) {
+        const ratio = maxDist / dist;
+        dx *= ratio;
+        dy *= ratio;
+      }
+
+      mobileState.joystick.dx = dx / maxDist;
+      mobileState.joystick.dy = dy / maxDist;
+
+      thumb.style.left = `calc(35% + ${(dx / maxDist) * 35}%)`;
+      thumb.style.top = `calc(35% + ${(dy / maxDist) * 35}%)`;
+    }
+    e.preventDefault();
+  };
+
+  zone.addEventListener('touchmove', handleJoystickMove, { passive: false });
+
+  const endJoystick = (e: TouchEvent) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === mobileState.joystick.id) {
+        mobileState.joystick.id = null;
+        mobileState.joystick.active = false;
+        mobileState.joystick.dx = 0;
+        mobileState.joystick.dy = 0;
+        thumb.classList.remove('active');
+        thumb.style.left = '35%';
+        thumb.style.top = '35%';
+      }
+    }
+  };
+  zone.addEventListener('touchend', endJoystick);
+  zone.addEventListener('touchcancel', endJoystick);
+
+  // === Look zone (camera drag) ===
+  const lookZone = document.getElementById('lookZone');
+  if (!lookZone) return;
+
+  lookZone.addEventListener('touchstart', (e: TouchEvent) => {
+    if (mobileState.look.id !== null) return;
+    const touch = e.changedTouches[0];
+    mobileState.look.id = touch.identifier;
+    mobileState.look.active = true;
+    mobileState.look.lastX = touch.clientX;
+    mobileState.look.lastY = touch.clientY;
+    e.preventDefault();
+  }, { passive: false });
+
+  lookZone.addEventListener('touchmove', (e: TouchEvent) => {
+    for (let i = 0; i < e.touches.length; i++) {
+      const touch = e.touches[i];
+      if (touch.identifier !== mobileState.look.id) continue;
+
+      const dx = touch.clientX - mobileState.look.lastX;
+      const dy = touch.clientY - mobileState.look.lastY;
+      state.mouse.x -= dx * 0.004;
+      state.mouse.y -= dy * 0.004;
+      state.mouse.y = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, state.mouse.y));
+      mobileState.look.lastX = touch.clientX;
+      mobileState.look.lastY = touch.clientY;
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  const endLook = (e: TouchEvent) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === mobileState.look.id) {
+        mobileState.look.id = null;
+        mobileState.look.active = false;
+      }
+    }
+  };
+  lookZone.addEventListener('touchend', endLook);
+  lookZone.addEventListener('touchcancel', endLook);
+
+  // === Action buttons ===
+  const fireBtn = document.getElementById('fireBtn');
+  const reloadBtn = document.getElementById('reloadBtn');
+  const crouchBtn = document.getElementById('crouchBtn');
+  const jumpBtn = document.getElementById('jumpBtn');
+
+  if (fireBtn) {
+    const startFire = (e: Event) => {
+      e.preventDefault();
+      fireBtn.classList.add('held');
+      fireInterval = window.setInterval(() => {
+        (window as any).simFire();
+      }, 100);
+    };
+    const stopFire = (e: Event) => {
+      e.preventDefault();
+      fireBtn.classList.remove('held');
+      if (fireInterval) { clearInterval(fireInterval); fireInterval = null; }
+    };
+    fireBtn.addEventListener('touchstart', startFire, { passive: false });
+    fireBtn.addEventListener('touchend', stopFire, { passive: false });
+    fireBtn.addEventListener('touchcancel', stopFire, { passive: false });
+    fireBtn.addEventListener('mousedown', startFire);
+    fireBtn.addEventListener('mouseup', stopFire);
+    fireBtn.addEventListener('mouseleave', stopFire);
+  }
+
+  if (reloadBtn) {
+    reloadBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      (window as any).simReload();
+    }, { passive: false });
+    reloadBtn.addEventListener('click', () => (window as any).simReload());
+  }
+
+  if (crouchBtn) {
+    crouchBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      state.player.stance = state.player.stance === 'Stand' ? 'Crouch' : 'Stand';
+      screenShake(2, 80);
+    }, { passive: false });
+  }
+
+  if (jumpBtn) {
+    jumpBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (state.player.isGrounded) {
+        state.player.velocity[1] = 6;
+        state.player.isGrounded = false;
+        screenShake(1.5, 100);
+      }
+    }, { passive: false });
+  }
+
+  console.log('📱 Mobile touch controls initialized');
+}
+
+let fireInterval: number | null = null;
+
+function updateMobileMovement(delta: number): void {
+  if (!mobileState.joystick.active) {
+    state.player.isMoving = false;
+    state.player.isSprinting = false;
+    return;
+  }
+
+  const dx = mobileState.joystick.dx;
+  const dy = mobileState.joystick.dy;
+  const mag = Math.sqrt(dx * dx + dy * dy);
+  if (mag < 0.1) {
+    state.player.isMoving = false;
+    state.player.isSprinting = false;
+    return;
+  }
+
+  // Movement: up = forward (-dy), strafe = dx
+  state.player.isMoving = true;
+  state.player.isSprinting = mag > 0.9;
+
+  const yaw = state.mouse.x;
+  const speed = state.player.isSprinting ? 8 : 4;
+  const sin = Math.sin(yaw);
+  const cos = Math.cos(yaw);
+
+  // forward vector (-sin, 0, -cos), right vector (cos, 0, -sin)
+  const moveForward = -dy;
+  const moveRight = dx;
+
+  state.player.velocity[0] = (-sin * moveForward + cos * moveRight) * speed;
+  state.player.velocity[2] = (-cos * moveForward - sin * moveRight) * speed;
+
+  // Apply to position
+  state.player.position[0] += state.player.velocity[0] * delta;
+  state.player.position[2] += state.player.velocity[2] * delta;
+
+  // Gravity + ground
+  if (!state.player.isGrounded) {
+    state.player.velocity[1] -= 20 * delta;
+  }
+  state.player.position[1] += state.player.velocity[1] * delta;
+  if (state.player.position[1] <= 1.7) {
+    state.player.position[1] = 1.7;
+    state.player.velocity[1] = 0;
+    state.player.isGrounded = true;
+  }
+}
+
+// ============================================
 // SCREEN SHAKE (weapons / damage)
 // ============================================
-let shakeTimeout: number | null = null;
 function screenShake(intensity: number, duration: number): void {
   const app = document.getElementById('app');
   if (!app) return;
@@ -300,6 +540,8 @@ function screenShake(intensity: number, duration: number): void {
 
   state.isReloading = true;
   document.getElementById('reload-text')?.classList.add('visible');
+  // Trigger tactical reload animation on viewmodel
+  viewModel?.triggerReload();
 
   setTimeout(() => {
     const needed = state.maxAmmo - state.ammo;
@@ -324,6 +566,11 @@ function screenShake(intensity: number, duration: number): void {
   state.ammo--;
   // AK-74 heavy screen shake (Resident Evil style)
   screenShake(3, 120);
+  // FPS viewmodel recoil + muzzle flash
+  if (viewModel) {
+    viewModel.triggerRecoil();
+    viewModel.showMuzzleFlash();
+  }
   updateHUD();
 };
 
@@ -438,10 +685,142 @@ let gasDamageInterval = setInterval(() => {
 }, 1000);
 
 // ============================================
-// MAIN LOOP (radar draw)
+// 3D SCENE (background + FPS viewmodel)
 // ============================================
+
+let scene3D: THREE.Scene;
+let camera3D: THREE.PerspectiveCamera;
+let renderer3D: THREE.WebGLRenderer;
+let viewModel: ViewModel;
+let lastLookDx = 0, lastLookDy = 0;
+
+function init3DScene(): void {
+  const canvas = document.getElementById('bg3d') as HTMLCanvasElement;
+  if (!canvas) return;
+
+  scene3D = new THREE.Scene();
+  scene3D.background = new THREE.Color(0x0a0a0f);
+  scene3D.fog = new THREE.Fog(0x0a0a0f, 30, 200);
+
+  camera3D = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
+  camera3D.rotation.order = 'YXZ';
+
+  renderer3D = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+  renderer3D.setSize(window.innerWidth, window.innerHeight);
+  renderer3D.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer3D.shadowMap.enabled = true;
+  renderer3D.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer3D.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer3D.toneMappingExposure = 1.1;
+
+  // === Lighting ===
+  const ambient = new THREE.AmbientLight(0x40404a, 0.6);
+  scene3D.add(ambient);
+
+  const sun = new THREE.DirectionalLight(0xffd5a0, 1.0);
+  sun.position.set(50, 80, 30);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far = 300;
+  sun.shadow.camera.left = -80;
+  sun.shadow.camera.right = 80;
+  sun.shadow.camera.top = 80;
+  sun.shadow.camera.bottom = -80;
+  scene3D.add(sun);
+
+  const fill = new THREE.HemisphereLight(0x88aaff, 0x221100, 0.25);
+  scene3D.add(fill);
+
+  // === Ground ===
+  const groundGeo = new THREE.PlaneGeometry(400, 400, 32, 32);
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a24, roughness: 0.85, metalness: 0.1,
+  });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene3D.add(ground);
+
+  // Grid overlay for tactical feel
+  const grid = new THREE.GridHelper(400, 80, 0x2a3a4a, 0x1a2030);
+  (grid.material as THREE.Material).opacity = 0.35;
+  (grid.material as THREE.Material).transparent = true;
+  grid.position.y = 0.01;
+  scene3D.add(grid);
+
+  // === Buildings (placeholder cover) ===
+  const buildingMat = new THREE.MeshStandardMaterial({
+    color: 0x252530, roughness: 0.8, metalness: 0.15,
+  });
+  for (let i = 0; i < 15; i++) {
+    const w = 3 + Math.random() * 5;
+    const h = 5 + Math.random() * 15;
+    const d = 3 + Math.random() * 5;
+    const building = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), buildingMat);
+    building.position.set(
+      (Math.random() - 0.5) * 150,
+      h / 2,
+      (Math.random() - 0.5) * 150
+    );
+    building.castShadow = true;
+    building.receiveShadow = true;
+    scene3D.add(building);
+  }
+
+  // === Zone ring (visual) ===
+  const zoneGeo = new THREE.RingGeometry(198, 200, 64);
+  const zoneMat = new THREE.MeshBasicMaterial({
+    color: 0x00b4ff, side: THREE.DoubleSide, transparent: true, opacity: 0.6,
+  });
+  const zoneRing = new THREE.Mesh(zoneGeo, zoneMat);
+  zoneRing.rotation.x = -Math.PI / 2;
+  zoneRing.position.y = 0.1;
+  zoneRing.name = 'zoneRing3D';
+  scene3D.add(zoneRing);
+
+  // === FPS Viewmodel ===
+  viewModel = new ViewModel(scene3D, camera3D);
+
+  // Resize handler
+  window.addEventListener('resize', () => {
+    camera3D.aspect = window.innerWidth / window.innerHeight;
+    camera3D.updateProjectionMatrix();
+    renderer3D.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  console.log('3D scene initialized ✓');
+}
+
+function update3DScene(delta: number): void {
+  if (!camera3D || !renderer3D) return;
+
+  // Camera from player yaw/pitch
+  camera3D.rotation.y = state.mouse.x;
+  camera3D.rotation.x = state.mouse.y;
+
+  // Compute look delta for viewmodel sway
+  const lookDx = state.mouse.x - lastLookDx;
+  const lookDy = state.mouse.y - lastLookDy;
+  lastLookDx = state.mouse.x;
+  lastLookDy = state.mouse.y;
+
+  viewModel.updateSway(lookDx, lookDy, delta);
+  viewModel.update(delta, state.player.isMoving, state.player.isSprinting);
+
+  // Update zone ring scale (shrink simulation)
+  const zoneRing = scene3D.getObjectByName('zoneRing3D') as THREE.Mesh;
+  if (zoneRing) {
+    const scale = 0.5 + (8 - state.zonePhase) * 0.07;
+    zoneRing.scale.setScalar(Math.max(0.1, scale));
+  }
+
+  renderer3D.render(scene3D, camera3D);
+}
 function loop(): void {
   drawRadar();
+  updateMobileMovement(0.016);
+  update3DScene(0.016);
   // Random gas effect fluctuation
   const gasIntensity = state.isInGas ? 0.7 + Math.sin(Date.now() / 4000) * 0.2 : (Math.sin(Date.now() / 4000) + 1) / 2 * 0.3;
   updateGasEffect(gasIntensity);
@@ -462,6 +841,8 @@ function start(): void {
   updateHUD();
   loop();
   scheduleNextDeath(); // start alive countdown
+  initMobileControls();
+  init3DScene();
 
   // Auto demo events
   setTimeout(() => addKillFeed('Ghost_42', 'Loot_Goblin', 'AK-74'), 3000);

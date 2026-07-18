@@ -306,17 +306,76 @@
     .reload-text.visible { opacity: 1; }
 
     @media (max-width: 600px) {
-      .radar { width: 130px; height: 130px; bottom: 90px; left: 16px; }
-      .hud { bottom: 16px; left: 16px; right: 16px; }
-      .hud-panel { padding: 8px 12px; }
-      .stat-value { font-size: 18px; }
-      .health-bar { width: 140px; }
-      .squad-member { min-width: 130px; padding: 4px 8px; }
-      .weapon-hud { padding: 8px 14px; }
-      .ammo-display { font-size: 22px; }
-      .debug-controls { flex-wrap: wrap; justify-content: center; max-width: 90vw; }
-      .debug-btn { padding: 5px 10px; font-size: 9px; }
+      .radar { width: 110px; height: 110px; bottom: 200px; left: 12px; }
+      .hud { bottom: 12px; left: 12px; right: 12px; }
+      .hud-panel { padding: 6px 10px; }
+      .stat-value { font-size: 16px; }
+      .health-bar { width: 100px; }
+      .squad-member { min-width: 120px; padding: 4px 8px; font-size: 10px; }
+      .weapon-hud { padding: 6px 12px; bottom: 200px; }
+      .ammo-display { font-size: 18px; }
+      .debug-controls { display: none; }
     }
+
+    /* === Mobile Controls === */
+    #mobileControls { display: none; }
+    body.touch #mobileControls { display: block; }
+
+    .joystick-zone {
+      position: fixed; bottom: 20px; left: 20px;
+      width: 130px; height: 130px;
+      pointer-events: auto; z-index: 210; touch-action: none;
+    }
+    .joystick-base {
+      position: absolute; inset: 0; border-radius: 50%;
+      background: rgba(15,15,20,0.5); border: 2px solid rgba(0,180,255,0.35);
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    }
+    .joystick-thumb {
+      position: absolute; top: 35%; left: 35%; width: 30%; height: 30%;
+      border-radius: 50%; background: rgba(0,180,255,0.55);
+      border: 1px solid rgba(0,180,255,0.7);
+      transition: background 0.15s;
+    }
+    .joystick-thumb.active { background: rgba(0,180,255,0.85); }
+
+    .action-buttons {
+      position: fixed; bottom: 24px; right: 20px;
+      display: flex; align-items: flex-end; gap: 10px;
+      pointer-events: none; z-index: 210;
+    }
+    .action-cluster { display: flex; flex-direction: column; gap: 10px; align-items: center; pointer-events: none; }
+    .action-row { display: flex; gap: 10px; }
+    .action-btn {
+      width: 60px; height: 60px; border-radius: 50%;
+      background: rgba(15,15,20,0.7); border: 1px solid rgba(60,60,80,0.5);
+      color: rgba(240,240,255,0.85); font-size: 11px; font-weight: 700;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      pointer-events: auto; cursor: pointer; touch-action: manipulation;
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+      transition: transform 0.08s, background 0.15s;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+    }
+    .action-btn:active, .action-btn.held {
+      transform: scale(0.92); background: rgba(0,180,255,0.3);
+      border-color: #00b4ff; color: #fff;
+    }
+    .action-btn.fire {
+      width: 76px; height: 76px; background: rgba(220,50,50,0.25);
+      border-color: rgba(220,50,50,0.6); color: #ffa0a0; font-size: 10px;
+    }
+    .action-btn.fire:active, .action-btn.fire.held {
+      background: rgba(220,50,50,0.6); color: #fff;
+    }
+    .action-icon { font-size: 18px; line-height: 1; margin-bottom: 2px; }
+    .action-label { font-size: 9px; opacity: 0.85; }
+
+    .look-zone {
+      position: fixed; top: 0; right: 0; width: 60%; height: 70%;
+      z-index: 150; touch-action: none; pointer-events: auto;
+    }
+    body.touch #app { height: 100vh; }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -324,6 +383,9 @@
 </head>
 <body>
   <div class="backdrop"></div>
+
+  <!-- 3D background (Three.js renders FPS viewmodel here) -->
+  <canvas id="bg3d" style="position:fixed;inset:0;z-index:1;display:block;"></canvas>
 
   <div id="loading">
     <div class="spinner"></div>
@@ -429,6 +491,41 @@
   </div>
 
   <div id="gas-vignette"></div>
+
+  <!-- Mobile Controls (only on touch devices) -->
+  <div id="mobileControls">
+    <!-- Look zone (right 60% of screen for camera drag) -->
+    <div class="look-zone" id="lookZone"></div>
+
+    <!-- Virtual Joystick (bottom-left) -->
+    <div class="joystick-zone" id="leftJoystick">
+      <div class="joystick-base"></div>
+      <div class="joystick-thumb" id="joystickThumb"></div>
+    </div>
+
+    <!-- Action Buttons (bottom-right) -->
+    <div class="action-buttons">
+      <div class="action-cluster">
+        <div class="action-row">
+          <button class="action-btn" id="reloadBtn">
+            <span class="action-icon">⟲</span><span class="action-label">Reload</span>
+          </button>
+          <button class="action-btn" id="jumpBtn">
+            <span class="action-icon">⤴</span><span class="action-label">Jump</span>
+          </button>
+        </div>
+        <div class="action-row">
+          <button class="action-btn" id="crouchBtn">
+            <span class="action-icon">▼</span><span class="action-label">Crouch</span>
+          </button>
+          <button class="action-btn fire" id="fireBtn">
+            <span class="action-icon">●</span><span class="action-label">Fire</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
