@@ -711,7 +711,7 @@ function init3DScene(): void {
 
   // === Lighting (Resident Evil gritty) ===
   // Low ambient for dark vibe
-  const ambient = new THREE.AmbientLight(0x202830, 0.35);
+  const ambient = new THREE.AmbientLight(0xffffff, 1.2);
   scene3D.add(ambient);
 
   // Sharp sun with long shadows
