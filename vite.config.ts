@@ -1,13 +1,11 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vite';
 
 export default defineConfig({
   base: '/battle-royale-web/',
+  server: { port: 3000, host: true },
   build: {
-    outDir: 'dist',
+    target: 'es2022',
+    minify: false,
     sourcemap: true,
   },
-  server: {
-    port: 3000,
-    open: true,
-  },
-})
+});
