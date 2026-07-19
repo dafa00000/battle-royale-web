@@ -5,7 +5,7 @@ export default defineConfig({
   server: { port: 3000, host: true },
   build: {
     target: 'es2022',
-    minify: false,
-    sourcemap: true,
+    minify: 'esbuild',
+    sourcemap: false,
   },
 });

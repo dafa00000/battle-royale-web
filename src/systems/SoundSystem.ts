@@ -9,15 +9,17 @@ export class SoundSystem {
   private ensureCtx(): AudioContext {
     if (!this.ctx) {
       const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
-      this.ctx = new AC();
+      const ctx: AudioContext = new AC();
+      this.ctx = ctx;
       // Cache noise buffer for gunshots
-      const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.3, this.ctx.sampleRate);
+      const buf = ctx.createBuffer(1, ctx.sampleRate * 0.3, ctx.sampleRate);
       const data = buf.getChannelData(0);
       for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
       this.noiseBuffer = buf;
     }
-    if (this.ctx.state === 'suspended') this.ctx.resume();
-    return this.ctx;
+    const ctx = this.ctx!;
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
   }
 
   resume(): void {
