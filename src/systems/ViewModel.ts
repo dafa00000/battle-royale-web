@@ -94,6 +94,25 @@ export class ViewModel {
       muzzleFlash.position.set(0, 0.012, -0.56);
       muzzleFlash.name = 'muzzleFlashVM';
       this.group.add(muzzleFlash);
+
+      // Cross-shaped flash particle (two crossed planes)
+      const crossMat = new THREE.MeshBasicMaterial({
+        color: 0xffcc44, transparent: true, opacity: 0, side: THREE.DoubleSide,
+      });
+      const crossH = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.04), crossMat);
+      const crossV = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.18), crossMat);
+      const flashGroup = new THREE.Group();
+      flashGroup.add(crossH);
+      flashGroup.add(crossV);
+      flashGroup.position.set(0, 0.012, -0.58);
+      flashGroup.name = 'muzzleCrossVM';
+      this.group.add(flashGroup);
+
+      // Dynamic muzzle PointLight (warm orange)
+      const flashLight = new THREE.PointLight(0xffaa33, 0, 3, 2);
+      flashLight.position.set(0, 0.02, -0.6);
+      flashLight.name = 'muzzleLightVM';
+      this.group.add(flashLight);
     } catch (e) {
       console.error('ViewModel build failed, using fallback box:', e);
       const fallback = new THREE.Mesh(
@@ -113,11 +132,24 @@ export class ViewModel {
   }
 
   update(_delta: number, _isMoving: boolean, _isSprinting: boolean): void {
-    // Fade muzzle flash
+    // Fade muzzle flash plane
     const flash = this.group.getObjectByName('muzzleFlashVM') as THREE.Mesh | null;
     if (flash) {
       const mat = flash.material as THREE.MeshBasicMaterial;
-      mat.opacity = Math.max(0, mat.opacity - _delta * 8);
+      mat.opacity = Math.max(0, mat.opacity - _delta * 20);
+    }
+    // Fade cross particle
+    const cross = this.group.getObjectByName('muzzleCrossVM') as THREE.Group | null;
+    if (cross) {
+      cross.children.forEach(c => {
+        const m = (c as THREE.Mesh).material as THREE.MeshBasicMaterial;
+        if (m) m.opacity = Math.max(0, m.opacity - _delta * 20);
+      });
+    }
+    // Fade muzzle light
+    const light = this.group.getObjectByName('muzzleLightVM') as THREE.PointLight | null;
+    if (light) {
+      light.intensity = Math.max(0, light.intensity - _delta * 40);
     }
   }
 
@@ -125,11 +157,28 @@ export class ViewModel {
   triggerReload(): void {}
 
   showMuzzleFlash(): void {
+    // Plane flash
     const flash = this.group.getObjectByName('muzzleFlashVM') as THREE.Mesh | null;
-    if (!flash) return;
-    const mat = flash.material as THREE.MeshBasicMaterial;
-    mat.opacity = 1;
-    flash.scale.setScalar(0.7 + Math.random() * 0.6);
-    flash.rotation.z = Math.random() * Math.PI * 2;
+    if (flash) {
+      const mat = flash.material as THREE.MeshBasicMaterial;
+      mat.opacity = 1;
+      flash.scale.setScalar(0.7 + Math.random() * 0.6);
+      flash.rotation.z = Math.random() * Math.PI * 2;
+    }
+    // Cross particle
+    const cross = this.group.getObjectByName('muzzleCrossVM') as THREE.Group | null;
+    if (cross) {
+      cross.children.forEach(c => {
+        const m = (c as THREE.Mesh).material as THREE.MeshBasicMaterial;
+        if (m) m.opacity = 1;
+      });
+      cross.rotation.z = Math.random() * Math.PI * 2;
+      cross.scale.setScalar(0.8 + Math.random() * 0.5);
+    }
+    // PointLight pop
+    const light = this.group.getObjectByName('muzzleLightVM') as THREE.PointLight | null;
+    if (light) {
+      light.intensity = 3.5;
+    }
   }
 }

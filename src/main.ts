@@ -3,6 +3,8 @@
 // ============================================
 import * as THREE from 'three';
 import { ViewModel } from './systems/ViewModel';
+import { sound } from './systems/SoundSystem';
+import { EnemyBots } from './systems/EnemyBots';
 
 interface GameState {
   health: number; maxHealth: number;
@@ -566,6 +568,8 @@ function screenShake(intensity: number, duration: number): void {
     viewModel.triggerRecoil();
     viewModel.showMuzzleFlash();
   }
+  // Procedural gunshot audio
+  sound.gunshot();
   updateHUD();
 };
 
@@ -687,7 +691,9 @@ let scene3D: THREE.Scene;
 let camera3D: THREE.PerspectiveCamera;
 let renderer3D: THREE.WebGLRenderer;
 let viewModel: ViewModel;
+let enemyBots: EnemyBots;
 let lastLookDx = 0, lastLookDy = 0;
+let lastFootstepTime = 0;
 
 function init3DScene(): void {
   const canvas = document.getElementById('bg3d') as HTMLCanvasElement;
@@ -854,6 +860,14 @@ function init3DScene(): void {
   // === FPS Viewmodel ===
   viewModel = new ViewModel(scene3D, camera3D);
 
+  // === Enemy Bots (red moving targets) ===
+  enemyBots = new EnemyBots(scene3D);
+
+  // Resume audio context on first user gesture (mobile autoplay policy)
+  const resumeAudio = () => { sound.resume(); window.removeEventListener('touchstart', resumeAudio); window.removeEventListener('mousedown', resumeAudio); };
+  window.addEventListener('touchstart', resumeAudio);
+  window.addEventListener('mousedown', resumeAudio);
+
   // Resize handler
   window.addEventListener('resize', () => {
     camera3D.aspect = window.innerWidth / window.innerHeight;
@@ -948,6 +962,7 @@ function jumpButtonHandler(): void {
   camState.velY = 8; // jump velocity
   camState.isJumping = true;
   screenShake(1.5, 100);
+  sound.jump();
 }
 
 function updateCameraPhysics(delta: number): void {
@@ -970,6 +985,7 @@ function updateCameraPhysics(delta: number): void {
       camState.velY = 0;
       camState.isJumping = false;
       screenShake(0.8, 60); // landing thud
+      sound.land();
     }
   }
 
@@ -1016,6 +1032,17 @@ function loop(): void {
   updateMobileMovement(0.016);
   updateCameraPhysics(0.016);
   updateViewModelScene(0.016);
+  // Update enemy bots movement
+  if (enemyBots) enemyBots.update(0.016);
+  // Footstep sound when moving
+  if (state.player.isMoving && !camState.isJumping) {
+    const now = performance.now();
+    const interval = state.player.isSprinting ? 280 : 450;
+    if (now - lastFootstepTime > interval) {
+      sound.footstep();
+      lastFootstepTime = now;
+    }
+  }
   // Random gas effect fluctuation
   const gasIntensity = state.isInGas ? 0.7 + Math.sin(Date.now() / 4000) * 0.2 : (Math.sin(Date.now() / 4000) + 1) / 2 * 0.3;
   updateGasEffect(gasIntensity);
