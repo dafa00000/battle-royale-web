@@ -530,6 +530,26 @@
     </div>
   </div>
 
+  <script>
+    // Capture errors before bundle executes
+    window.__errors = [];
+    window.addEventListener('error', function(e) {
+      window.__errors.push({
+        msg: e.message,
+        filename: e.filename,
+        line: e.lineno,
+        col: e.colno,
+        stack: e.error ? (e.error.stack || e.error.message) : 'no err obj'
+      });
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      window.__errors.push({
+        type: 'promise',
+        reason: String(e.reason),
+        stack: e.reason && e.reason.stack ? e.reason.stack : ''
+      });
+    });
+  </script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
