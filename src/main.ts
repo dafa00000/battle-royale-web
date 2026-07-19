@@ -951,6 +951,7 @@ function jumpButtonHandler(): void {
 }
 
 function updateCameraPhysics(delta: number): void {
+  if (!camera3D || !renderer3D) return;
   // === Crouch tween (lerp over 0.2s) ===
   if (camState.crouchT < 1) {
     camState.crouchT = Math.min(1, camState.crouchT + delta / 0.2);
@@ -1063,10 +1064,10 @@ function start(): void {
 
   renderSquad();
   updateHUD();
-  loop();
   scheduleNextDeath(); // start alive countdown
-  initMobileControls();
   init3DScene();
+  initMobileControls();
+  loop();
 
   // Auto demo events
   setTimeout(() => addKillFeed('Ghost_42', 'Loot_Goblin', 'AK-74'), 3000);
