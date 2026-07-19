@@ -570,6 +570,28 @@ function screenShake(intensity: number, duration: number): void {
   }
   // Procedural gunshot audio
   sound.gunshot();
+
+  // === Raycast hit detection from camera center ===
+  if (camera3D && enemyBots) {
+    const raycaster = new THREE.Raycaster();
+    // Cast from camera through center of screen
+    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera3D);
+    raycaster.far = 200;
+    const hittable = enemyBots.allHittableMeshes;
+    const intersects = raycaster.intersectObjects(hittable, false);
+    if (intersects.length > 0) {
+      const hit = intersects[0];
+      const bot = enemyBots.findBotByMesh(hit.object);
+      if (bot && !bot.isDead) {
+        enemyBots.registerHit(bot, hit.point, 25);
+        // Check if killed
+        if (bot.health <= 0) {
+          addKillFeed('YOU', bot.id.replace('bot_', 'BOT_').toUpperCase(), 'AK-74');
+        }
+      }
+    }
+  }
+
   updateHUD();
 };
 
